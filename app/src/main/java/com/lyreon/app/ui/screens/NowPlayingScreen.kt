@@ -143,6 +143,7 @@ fun NowPlayingScreen(
     onMoveQueueItem: (Int, Int) -> Unit,
     onSetVideoMode: (Boolean) -> Unit,
     onSeekMs: (Long) -> Unit,
+    artworkSharedModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val track = playerState.currentTrack
@@ -319,6 +320,7 @@ fun NowPlayingScreen(
                     positionMs = pos.positionMs,
                     onToggleLyrics = { showLyrics = !showLyrics },
                     onSeekMs = onSeekMs,
+                    sharedModifier = artworkSharedModifier,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -901,12 +903,16 @@ private fun ArtworkOrLyrics(
     positionMs: Long,
     onToggleLyrics: () -> Unit,
     onSeekMs: (Long) -> Unit,
+    sharedModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             // Persegi nyaris 1:1, sedikit lebih tinggi (lebih elegan dari 16:9)
             .aspectRatio(0.94f)
+            // Shared bounds dengan artwork mini player (ukuran berubah → di kiri;
+            // clip yang ikut morph di kanan).
+            .then(sharedModifier)
             .clip(RoundedCornerShape(20.dp))
             .background(LyreonSurface)
             .clickable(onClick = onToggleLyrics),

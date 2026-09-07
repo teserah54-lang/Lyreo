@@ -7,6 +7,8 @@ package com.lyreon.app.ui.components
 
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -16,9 +18,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.SkipNext
@@ -50,11 +54,15 @@ import com.lyreon.app.ui.theme.LyreonMotion
 import com.lyreon.app.ui.theme.LyreonRadius
 import com.lyreon.app.ui.theme.lyreonChromeEnter
 import com.lyreon.app.ui.theme.lyreonChromeExit
+import com.lyreon.app.ui.theme.lyreonSharedBoundsTransform
+import com.lyreon.app.ui.theme.lyreonSharedEnter
+import com.lyreon.app.ui.theme.lyreonSharedExit
 import com.lyreon.app.ui.theme.lyreonTween
 
 /** Sudut mini player: sedang, selaras kartu (skala radius tema). */
 private val LyreonMiniShape = RoundedCornerShape(LyreonRadius.md)
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun MiniPlayerBar(
     track: LyreonTrack?,
@@ -65,6 +73,8 @@ fun MiniPlayerBar(
     onToggle: () -> Unit,
     onNext: () -> Unit,
     onOpen: () -> Unit,
+    sharedElementScope: SharedTransitionScope? = null,
+    sharedContentState: SharedTransitionScope.SharedContentState? = null,
     modifier: Modifier = Modifier,
 ) {
     AnimatedVisibility(
@@ -74,6 +84,23 @@ fun MiniPlayerBar(
         modifier = modifier,
     ) {
         if (track == null) return@AnimatedVisibility
+
+        // Artwork ikut transisi bersama (shared bounds) dengan artwork besar di
+        // Now Playing — satu-satunya sumber bounds morph saat layar dibuka.
+        // Dipakai hanya bila LyreonRoot menyediakan scope (keduanya non-null).
+        val artworkSharedModifier = if (sharedElementScope != null && sharedContentState != null) {
+            with(sharedElementScope) {
+                Modifier.sharedBounds(
+                    sharedContentState,
+                    animatedVisibilityScope = this@AnimatedVisibility,
+                    enter = lyreonSharedEnter(),
+                    exit = lyreonSharedExit(),
+                    boundsTransform = lyreonSharedBoundsTransform(),
+                )
+            }
+        } else {
+            Modifier
+        }
 
         // Progress dikoleksi LOKAL di widget ini — hanya bar kecil ini yang
         // recompose tiap 500ms, bukan seluruh layar di belakangnya.
@@ -115,7 +142,14 @@ fun MiniPlayerBar(
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Artwork(url = track.thumbnailUrl, title = track.title, size = 44.dp)
+                Box(modifier = Modifier.size(44.dp).then(artworkSharedModifier)) {
+                    Artwork(
+                        url = track.thumbnailUrl,
+                        title = track.title,
+                        size = null,
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                }
                 Spacer(Modifier.width(12.dp))
                 Column(modifier = Modifier.weight(1f)) {
                     Text(

@@ -32,13 +32,14 @@ fun Artwork(
     url: String,
     title: String,
     modifier: Modifier = Modifier,
-    size: Dp = 56.dp,
+    // null = isi mengikuti kendala induk (dipakai shared element transition,
+    // di mana ukuran artwork dianimasikan oleh SharedTransitionLayout).
+    size: Dp? = 56.dp,
     cornerRadius: Dp = 0.dp,
     bordered: Boolean = false,
 ) {
     val shape = RoundedCornerShape(cornerRadius)
-    val base = modifier
-        .size(size)
+    val base = (if (size == null) modifier.fillMaxSize() else modifier.size(size))
         .clip(shape)
         .background(LyreonSurface)
         .then(if (bordered) Modifier.border(1.dp, LyreonLine, shape) else Modifier)

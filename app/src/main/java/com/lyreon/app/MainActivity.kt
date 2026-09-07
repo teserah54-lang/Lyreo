@@ -7,6 +7,9 @@ package com.lyreon.app
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.SharedTransitionLayout
+import androidx.compose.animation.SharedTransitionScope
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -116,6 +119,9 @@ import com.lyreon.app.ui.theme.lyreonScreenEnter
 import com.lyreon.app.ui.theme.lyreonScreenExit
 import com.lyreon.app.ui.theme.lyreonScreenPopEnter
 import com.lyreon.app.ui.theme.lyreonScreenPopExit
+import com.lyreon.app.ui.theme.lyreonSharedBoundsTransform
+import com.lyreon.app.ui.theme.lyreonSharedEnter
+import com.lyreon.app.ui.theme.lyreonSharedExit
 import com.lyreon.app.ui.theme.motionBlurLayer
 import com.lyreon.app.ui.theme.rememberMotionBlurState
 import com.lyreon.app.ui.theme.reduceMotionEnabled
@@ -226,6 +232,7 @@ private val primaryDestinations = listOf(
     Dest("settings", R.string.nav_profile, Icons.Filled.Person, Icons.Outlined.Person),
 )
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun LyreonRoot(
     intentState: androidx.compose.runtime.State<Intent?>,
@@ -365,19 +372,6 @@ fun LyreonRoot(
         unselectedTextColor = LyreonTextMuted,
     )
 
-    val miniPlayer: @Composable () -> Unit = {
-        MiniPlayerBar(
-            track = playerState.currentTrack,
-            isPlaying = playerState.isPlaying,
-            isBuffering = playerState.isBuffering,
-            player = player,
-            visible = true,
-            onToggle = player::toggle,
-            onNext = player::next,
-            onOpen = { navController.navigate("now_playing") },
-        )
-    }
-
     val context = androidx.compose.ui.platform.LocalContext.current
 
     fun likeTrack(track: LyreonTrack) {
@@ -422,31 +416,93 @@ fun LyreonRoot(
         }
     }
 
-    Scaffold(
-        modifier = Modifier.fillMaxSize().background(LyreonBackground),
-        containerColor = LyreonBackground,
-        contentWindowInsets = WindowInsets.safeDrawing,
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            if (!useRail && !hideChrome) {
-                Column {
-                    miniPlayer()
-                    // Floating island ala iOS — bar navigasi melayang membulat
-                    Box(
-                        modifier = Modifier
-                            .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
-                            .clip(LyreonChromeShape)
-                            .background(LyreonSurfaceTranslucent)
-                            .border(1.dp, LyreonHairline, LyreonChromeShape),
+    SharedTransitionLayout(modifier = Modifier.fillMaxSize().background(LyreonBackground)) {
+        val transitionScope = this
+        // Satu state bersama untuk morph artwork mini player ⇄ Now Playing.
+        val npArtworkState = rememberSharedContentState(key = "now_playing_artwork")
+
+        val miniPlayer: @Composable () -> Unit = {
+            MiniPlayerBar(
+                track = playerState.currentTrack,
+                isPlaying = playerState.isPlaying,
+                isBuffering = playerState.isBuffering,
+                player = player,
+                // Tetap dikomposisi (animasi keluar) saat chrome disembunyikan,
+                // supaya shared transition punya bounds sumber saat Now Playing masuk.
+                visible = !hideChrome,
+                sharedElementScope = transitionScope,
+                sharedContentState = npArtworkState,
+                onToggle = player::toggle,
+                onNext = player::next,
+                onOpen = { navController.navigate("now_playing") },
+            )
+        }
+
+        Scaffold(
+            modifier = Modifier.fillMaxSize(),
+            containerColor = LyreonBackground,
+            contentWindowInsets = WindowInsets.safeDrawing,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            bottomBar = {
+                if (!useRail) {
+                    Column {
+                        miniPlayer()
+                        if (!hideChrome) {
+                            // Floating island ala iOS — bar navigasi melayang membulat
+                            Box(
+                                modifier = Modifier
+                                    .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+                                    .clip(LyreonChromeShape)
+                                    .background(LyreonSurfaceTranslucent)
+                                    .border(1.dp, LyreonHairline, LyreonChromeShape),
+                            ) {
+                                NavigationBar(
+                                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                    contentColor = LyreonTextPrimary,
+                                    tonalElevation = 0.dp,
+                                ) {
+                                    primaryDestinations.forEach { dest ->
+                                        val selected = route == dest.route
+                                        NavigationBarItem(
+                                            selected = selected,
+                                            onClick = {
+                                                navController.navigate(dest.route) {
+                                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                                    launchSingleTop = true
+                                                    restoreState = true
+                                                }
+                                            },
+                                            icon = {
+                                                Icon(
+                                                    if (selected) dest.selected else dest.unselected,
+                                                    contentDescription = stringResource(dest.labelRes),
+                                                )
+                                            },
+                                            label = { Text(stringResource(dest.labelRes), style = MaterialTheme.typography.labelSmall) },
+                                            colors = navColors,
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+        ) { innerPadding ->
+            Row(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+            ) {
+                if (useRail && !hideChrome) {
+                    NavigationRail(
+                        containerColor = LyreonElevated,
+                        contentColor = LyreonTextPrimary,
+                        modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
                     ) {
-                        NavigationBar(
-                            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                            contentColor = LyreonTextPrimary,
-                            tonalElevation = 0.dp,
-                        ) {
                         primaryDestinations.forEach { dest ->
                             val selected = route == dest.route
-                            NavigationBarItem(
+                            NavigationRailItem(
                                 selected = selected,
                                 onClick = {
                                     navController.navigate(dest.route) {
@@ -462,81 +518,46 @@ fun LyreonRoot(
                                     )
                                 },
                                 label = { Text(stringResource(dest.labelRes), style = MaterialTheme.typography.labelSmall) },
-                                colors = navColors,
+                                colors = railColors,
                             )
                         }
-                        }
                     }
                 }
-            }
-        },
-    ) { innerPadding ->
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
-        ) {
-            if (useRail && !hideChrome) {
-                NavigationRail(
-                    containerColor = LyreonElevated,
-                    contentColor = LyreonTextPrimary,
-                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
+
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        // Koneksi nested scroll dipasang di INDUK semua layar: satu
+                        // koneksi melayani setiap LazyColumn tanpa biaya per item.
+                        .scrollMotionBlur(motionBlurState, enabled = blurActive)
+                        .motionBlurLayer(
+                            state = motionBlurState,
+                            maxRadius = MotionBlurTransitionRadius,
+                            enabled = blurActive,
+                        ),
                 ) {
-                    primaryDestinations.forEach { dest ->
-                        val selected = route == dest.route
-                        NavigationRailItem(
-                            selected = selected,
-                            onClick = {
-                                navController.navigate(dest.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            },
-                            icon = {
-                                Icon(
-                                    if (selected) dest.selected else dest.unselected,
-                                    contentDescription = stringResource(dest.labelRes),
-                                )
-                            },
-                            label = { Text(stringResource(dest.labelRes), style = MaterialTheme.typography.labelSmall) },
-                            colors = railColors,
-                        )
+                    if (useRail) {
+                        miniPlayer()
                     }
-                }
-            }
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    // Koneksi nested scroll dipasang di INDUK semua layar: satu
-                    // koneksi melayani setiap LazyColumn tanpa biaya per item.
-                    .scrollMotionBlur(motionBlurState, enabled = blurActive)
-                    .motionBlurLayer(
-                        state = motionBlurState,
-                        maxRadius = MotionBlurTransitionRadius,
-                        enabled = blurActive,
-                    ),
-            ) {
-                if (useRail && !hideChrome) {
-                    miniPlayer()
+                    LyreonNavHost(
+                        navController = navController,
+                        locator = locator,
+                        playerState = playerState,
+                        videoMode = videoMode,
+                        likedIds = likedIds,
+                        downloadedIds = downloadedIds,
+                        reduceMotion = reduceMotionEnabled,
+                        onLike = ::likeTrack,
+                        onMore = ::openTrackActions,
+                        onEnqueueDownload = ::enqueueDownload,
+                        onSleepTimerClick = { showSleepTimer = true },
+                        playMovement = ::playQueryMovement,
+                        sharedTransitionScope = transitionScope,
+                        npArtworkState = npArtworkState,
+                        modifier = Modifier.weight(1f),
+                    )
                 }
-
-                LyreonNavHost(
-                    navController = navController,
-                    locator = locator,
-                    playerState = playerState,
-                    videoMode = videoMode,
-                    likedIds = likedIds,
-                    downloadedIds = downloadedIds,
-                    reduceMotion = reduceMotionEnabled,
-                    onLike = ::likeTrack,
-                    onMore = ::openTrackActions,
-                    onEnqueueDownload = ::enqueueDownload,
-                    onSleepTimerClick = { showSleepTimer = true },
-                    playMovement = ::playQueryMovement,
-                    modifier = Modifier.weight(1f),
-                )
             }
         }
     }
@@ -604,6 +625,7 @@ fun LyreonRoot(
     }
 }
 
+@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun LyreonNavHost(
     navController: NavHostController,
@@ -618,6 +640,8 @@ private fun LyreonNavHost(
     onEnqueueDownload: (LyreonTrack) -> Unit,
     onSleepTimerClick: () -> Unit,
     playMovement: (String) -> Unit,
+    sharedTransitionScope: SharedTransitionScope,
+    npArtworkState: SharedTransitionScope.SharedContentState,
     modifier: Modifier = Modifier,
 ) {
     val player = locator.player
@@ -831,8 +855,19 @@ private fun LyreonNavHost(
 
         composable("now_playing") {
             val current = playerState.currentTrack
+            // Shared bounds dengan artwork mini player (sumber morph saat masuk).
+            val artworkSharedModifier = with(sharedTransitionScope) {
+                Modifier.sharedBounds(
+                    npArtworkState,
+                    animatedVisibilityScope = this@composable,
+                    enter = lyreonSharedEnter(),
+                    exit = lyreonSharedExit(),
+                    boundsTransform = lyreonSharedBoundsTransform(),
+                )
+            }
             NowPlayingScreen(
                 playerState = playerState,
+                artworkSharedModifier = artworkSharedModifier,
                 player = player,
                 videoMode = videoMode,
                 controller = player.mediaController,
