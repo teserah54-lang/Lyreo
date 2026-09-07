@@ -142,8 +142,12 @@ Sudah: `ui/theme/Motion.kt` (`LocalReduceMotion`, `lyreonSpring`, `lyreonTween`,
 0.85/0.9) + semua animasi yang ada dimigrasikan: `MiniPlayerBar`, `IntroOverlay`
 (dipersingkat jadi 550 ms saat reduce motion), `GenreReelSlider`, `EventCountdown`
 (infinite pulse dimatikan), `LyreonPlayButton`, `Crossfade` lirik di `NowPlayingScreen`.
-Belum: transisi antar-layar (masih bawaan `NavController`), transisi baris lirik aktif
-(gelombang lirik), dan shared element artwork.
+**Sudah (2026-09-07, gelombang 8):** shared element artwork — `MainActivity` membungkus
+`LyreonRoot` di `SharedTransitionLayout`; artwork mini player ⇄ Now Playing disambung
+`Modifier.sharedBounds` (kunci `"now_playing_artwork"`), spec morph lewat
+`lyreonSharedBoundsTransform/Enter/Exit` yang menghormati reduce motion. Sumber bounds
+tersedia karena `hideChrome` membuat mini player keluar bersamaan layar Now Playing masuk.
+Belum: transisi baris lirik aktif (gelombang lirik).
 
 ## 8. Larangan selama pengerjaan tema
 
