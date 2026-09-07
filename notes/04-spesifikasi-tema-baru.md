@@ -130,11 +130,17 @@ keempat mode (SISTEM/GELAP/HITAM/KERTAS).
 **Fase 3 — Transparansi & blur terbatas — 🟡 SEBAGIAN.**
 Sudah: chrome memakai token baru (pulau navigasi = `surfaceTranslucent` + `hairline`,
 mini player = radius `md` + `hairline`, lembar bawah = `scrimSheet` + `LyreonRadius.top()`).
-Belum: blur satu lapis di chrome — **ditunda sengaja**, karena konten tidak digambar di
-bawah bottom bar (Scaffold memberi padding), jadi blur tidak akan terlihat apa pun selain
-memakan GPU. Kerjakan hanya bila chrome dibuat benar-benar mengambang di atas konten
-(`Modifier.consumeWindowInsets` / background transparan pada content Scaffold), lalu
-ukur `dumpsys gfxinfo com.lyreon.app framestats` sebelum/sesudah.
+**Sudah (2026-09-07, gelombang 8):** blur satu lapis di chrome — `MiniPlayerBar` kini
+berlatar frosted: artwork kabur lewat `Modifier.blur` (RenderEffect, API 31+), turun ke
+artwork redup di API < 31 / reduce motion / perangkat low-RAM, konten ditumpuk di atas
+tint `LyreonSurfaceTranslucent` agar teks tetap kontras (satu-satunya lapis blur; backdrop
+statis — tidak di dalam item list).
+Belum: pulau navigasi memblur konten yang menggulir di belakangnya — **tetap ditunda**,
+karena konten belum digambar di bawah bottom bar (Scaffold memberi padding) dan Compose
+tidak punya backdrop-blur selektif yang murah. Kerjakan hanya bila chrome dibuat
+benar-benar mengambang di atas konten (`Modifier.consumeWindowInsets` / background
+transparan pada content Scaffold), lalu ukur `dumpsys gfxinfo com.lyreon.app framestats`
+sebelum/sesudah.
 
 **Fase 4 — Motion iOS-like — 🟡 SEBAGIAN.**
 Sudah: `ui/theme/Motion.kt` (`LocalReduceMotion`, `lyreonSpring`, `lyreonTween`,
