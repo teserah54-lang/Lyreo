@@ -128,6 +128,26 @@ class LibraryRepository(
         )
     }
 
+    /** Tambahkan banyak track sekaligus (impor m3u/pls) — posisi berlanjut. */
+    suspend fun addTracksToPlaylist(playlistId: Long, tracks: List<LyreonTrack>) {
+        var size = libraryDao.playlistSize(playlistId)
+        tracks.forEach { track ->
+            libraryDao.insertPlaylistItem(
+                PlaylistItemEntity(
+                    playlistId = playlistId,
+                    videoId = track.videoId,
+                    position = size++,
+                    title = track.title,
+                    artist = track.artist,
+                    album = track.album,
+                    thumbnailUrl = track.thumbnailUrl,
+                    durationSec = track.durationSec,
+                    addedAt = System.currentTimeMillis(),
+                ),
+            )
+        }
+    }
+
     suspend fun removeFromPlaylist(playlistId: Long, videoId: String) {
         libraryDao.removePlaylistItem(playlistId, videoId)
         // rapikan posisi

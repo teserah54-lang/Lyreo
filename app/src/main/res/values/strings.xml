@@ -72,6 +72,12 @@
     <string name="new_playlist_title">PLAYLIST BARU</string>
     <string name="new_playlist_hint">Nama playlist…</string>
     <string name="playlist_created">Playlist \"%1$s\" dibuat.</string>
+    <string name="library_import_playlist">Impor playlist (m3u/pls)</string>
+    <string name="library_importing">Mengimpor…</string>
+    <string name="import_playlist_done">PLAYLIST DIIMPOR</string>
+    <string name="import_playlist_summary">\"%1$s\" dibuat dengan %2$d lagu. %3$d baris dilewati.</string>
+    <string name="import_playlist_failed_title">GAGAL MENGIMPOR</string>
+    <string name="import_playlist_failed_body">Berkas tidak bisa dibaca atau tidak berisi lagu yang dikenali.</string>
 
     <!-- Search / Explore -->
     <string name="search_kicker">Explorer</string>

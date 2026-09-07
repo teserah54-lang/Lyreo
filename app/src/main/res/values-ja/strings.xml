@@ -67,6 +67,12 @@
     <string name="new_playlist_title">新しいプレイリスト</string>
     <string name="new_playlist_hint">プレイリスト名…</string>
     <string name="playlist_created">プレイリスト「%1$s」を作成しました。</string>
+    <string name="library_import_playlist">プレイリストをインポート（m3u/pls）</string>
+    <string name="library_importing">インポート中…</string>
+    <string name="import_playlist_done">プレイリストをインポートしました</string>
+    <string name="import_playlist_summary">「%1$s」に%2$d曲を作成しました。%3$d行はスキップしました。</string>
+    <string name="import_playlist_failed_title">インポートに失敗しました</string>
+    <string name="import_playlist_failed_body">ファイルを読み取れないか、認識できる曲が含まれていません。</string>
 
     <string name="search_kicker">エクスプローラー</string>
     <string name="search_title">お気に入りの曲を\n見つけよう</string>

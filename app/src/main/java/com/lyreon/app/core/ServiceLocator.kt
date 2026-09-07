@@ -98,6 +98,11 @@ class ServiceLocator(val app: LyreonApp) {
         com.lyreon.app.local.LocalMusicRepository(app)
     }
 
+    /** Impor playlist lokal (m3u/pls) → track yang bisa diputar. */
+    val playlistImporter: com.lyreon.app.data.PlaylistImporter by lazy {
+        com.lyreon.app.data.PlaylistImporter(app, local)
+    }
+
     val session: SessionStore by lazy { SessionStore(app) }
 
     val player: PlayerManager by lazy { PlayerManager(app, this) }

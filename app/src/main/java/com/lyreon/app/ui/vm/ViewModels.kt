@@ -5,6 +5,7 @@
  */
 package com.lyreon.app.ui.vm
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.lifecycle.ViewModel
@@ -13,6 +14,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.lyreon.app.core.ServiceLocator
+import com.lyreon.app.data.PlaylistImportResult
 import com.lyreon.app.data.db.DownloadEntity
 import com.lyreon.app.data.db.DownloadState
 import com.lyreon.app.data.db.PlaylistEntity
@@ -632,6 +634,9 @@ data class LibraryUiState(
     val playlists: List<com.lyreon.app.data.db.PlaylistWithStats> = emptyList(),
     val history: List<LyreonTrack> = emptyList(),
     val downloads: List<DownloadEntity> = emptyList(),
+    val importing: Boolean = false,
+    val importResult: PlaylistImportResult? = null,
+    val importError: Boolean = false,
 )
 
 enum class LibraryTab(val label: String) { FAVORIT("FAVORIT"), PLAYLIST("PLAYLIST"), RIWAYAT("RIWAYAT"), OFFLINE("OFFLINE"), LOCAL("LOKAL") }
@@ -655,6 +660,9 @@ class LibraryViewModel(private val locator: ServiceLocator) : ViewModel() {
                     playlists = playlists,
                     history = history,
                     downloads = downloads,
+                    importing = _state.value.importing,
+                    importResult = _state.value.importResult,
+                    importError = _state.value.importError,
                 )
             }.collect { newState -> _state.update { newState } }
         }
@@ -665,6 +673,30 @@ class LibraryViewModel(private val locator: ServiceLocator) : ViewModel() {
     fun createPlaylist(name: String) {
         viewModelScope.launch { locator.library.createPlaylist(name) }
     }
+
+    /** Impor playlist dari berkas m3u/pls (URI hasil pemilih dokumen). */
+    fun importPlaylist(uri: Uri) {
+        if (_state.value.importing) return
+        viewModelScope.launch {
+            _state.update { it.copy(importing = true, importResult = null, importError = false) }
+            runCatching {
+                val result = locator.playlistImporter.import(uri)
+                if (result.imported.isNotEmpty()) {
+                    val id = locator.library.createPlaylist(result.playlistName)
+                    locator.library.addTracksToPlaylist(id, result.imported)
+                }
+                result
+            }.onSuccess { result ->
+                _state.update { it.copy(importing = false, importResult = result) }
+            }.onFailure {
+                _state.update { it.copy(importing = false, importError = true) }
+            }
+        }
+    }
+
+    fun clearImportResult() = _state.update { it.copy(importResult = null) }
+
+    fun clearImportError() = _state.update { it.copy(importError = false) }
 
     fun deletePlaylist(entity: PlaylistEntity) {
         viewModelScope.launch { locator.library.deletePlaylist(entity) }

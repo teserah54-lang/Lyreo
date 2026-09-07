@@ -67,6 +67,12 @@
     <string name="new_playlist_title">नई प्लेलिस्ट</string>
     <string name="new_playlist_hint">प्लेलिस्ट का नाम…</string>
     <string name="playlist_created">प्लेलिस्ट \"%1$s\" बनाई गई।</string>
+    <string name="library_import_playlist">प्लेलिस्ट आयात करें (m3u/pls)</string>
+    <string name="library_importing">आयात हो रहा है…</string>
+    <string name="import_playlist_done">प्लेलिस्ट आयात हुई</string>
+    <string name="import_playlist_summary">\"%1$s\" में %2$d गाने बनाए गए। %3$d पंक्तियाँ छोड़ी गईं।</string>
+    <string name="import_playlist_failed_title">आयात विफल</string>
+    <string name="import_playlist_failed_body">फ़ाइल पढ़ी नहीं जा सकी या उसमें कोई पहचाना गया गाना नहीं है।</string>
 
     <string name="search_kicker">एक्सप्लोरर</string>
     <string name="search_title">अपने पसंदीदा\nगाने खोजें</string>

@@ -88,6 +88,38 @@ class LocalMusicRepository(private val context: Context) {
             .take(limit)
     }
 
+    /**
+     * Cari SATU track lokal berdasarkan nama berkas (untuk impor m3u/pls).
+     * Cocokkan nama berkas persis di MediaStore (DISPLAY_NAME), lalu judul,
+     * terakhir folder kustom SAF (case-insensitive). Null bila tidak ada.
+     */
+    suspend fun findByFileName(fileName: String): LyreonTrack? = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext null
+        if (fileName.isBlank()) return@withContext null
+        val base = fileName.substringBeforeLast('.').trim()
+
+        runCatching {
+            queryStore(
+                match = "${MediaStore.Audio.Media.DISPLAY_NAME} = ?",
+                args = arrayOf(fileName),
+                limit = 1,
+            ).firstOrNull()
+                ?: if (base.isNotBlank()) {
+                    queryStore(
+                        match = "${MediaStore.Audio.Media.TITLE} = ?",
+                        args = arrayOf(base),
+                        limit = 1,
+                    ).firstOrNull()
+                } else {
+                    null
+                }
+        }.getOrNull()?.let { return@withContext it }
+
+        runCatching {
+            scanTrees().firstOrNull { it.title.equals(base, ignoreCase = true) }
+        }.getOrNull()
+    }
+
     private val storeProjection = arrayOf(
         MediaStore.Audio.Media._ID,
         MediaStore.Audio.Media.TITLE,

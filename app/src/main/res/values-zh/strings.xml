@@ -67,6 +67,12 @@
     <string name="new_playlist_title">新建歌单</string>
     <string name="new_playlist_hint">歌单名称…</string>
     <string name="playlist_created">歌单“%1$s”已创建。</string>
+    <string name="library_import_playlist">导入歌单（m3u/pls）</string>
+    <string name="library_importing">正在导入…</string>
+    <string name="import_playlist_done">歌单已导入</string>
+    <string name="import_playlist_summary">已创建“%1$s”，共 %2$d 首歌曲，跳过 %3$d 行。</string>
+    <string name="import_playlist_failed_title">导入失败</string>
+    <string name="import_playlist_failed_body">文件无法读取，或未包含可识别的歌曲。</string>
 
     <string name="search_kicker">探索者</string>
     <string name="search_title">寻找你\n喜爱的歌曲</string>

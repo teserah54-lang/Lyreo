@@ -67,6 +67,12 @@
     <string name="new_playlist_title">SENARAI MAIN BAHARU</string>
     <string name="new_playlist_hint">Nama senarai main…</string>
     <string name="playlist_created">Senarai main \"%1$s\" dicipta.</string>
+    <string name="library_import_playlist">Import senarai main (m3u/pls)</string>
+    <string name="library_importing">Mengimport…</string>
+    <string name="import_playlist_done">SENARAI MAIN DIIMPORT</string>
+    <string name="import_playlist_summary">\"%1$s\" dicipta dengan %2$d lagu. %3$d baris dilangkau.</string>
+    <string name="import_playlist_failed_title">IMPORT GAGAL</string>
+    <string name="import_playlist_failed_body">Fail tidak dapat dibaca atau tiada lagu yang dikenali.</string>
 
     <string name="search_kicker">Peneroka</string>
     <string name="search_title">Cari lagu\nkegemaran anda</string>

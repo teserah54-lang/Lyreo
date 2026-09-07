@@ -5,6 +5,8 @@
  */
 package com.lyreon.app.ui.screens
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -26,6 +28,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -79,6 +82,10 @@ fun LibraryScreen(
     val state by vm.state.collectAsStateWithLifecycle()
     var showNewPlaylist by remember { mutableStateOf(false) }
     var playlistToDelete by remember { mutableStateOf<PlaylistEntity?>(null) }
+
+    val importLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.OpenDocument(),
+    ) { uri -> if (uri != null) vm.importPlaylist(uri) }
 
     androidx.compose.runtime.LaunchedEffect(Unit) {
         LibraryTab.entries.getOrNull(initialTab)?.let(vm::selectTab)
@@ -200,6 +207,34 @@ fun LibraryScreen(
                             Icon(Icons.Filled.Add, contentDescription = null, tint = LyreonTextPrimary)
                             Spacer(Modifier.width(12.dp))
                             Text(stringResource(R.string.library_new_playlist), style = MaterialTheme.typography.labelMedium, color = LyreonTextPrimary)
+                        }
+                    }
+                    item {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 20.dp, vertical = 6.dp)
+                                .border(1.dp, LyreonLine)
+                                .background(LyreonSurface.copy(alpha = 0.3f))
+                                .clickable(enabled = !state.importing) {
+                                    importLauncher.launch(arrayOf("*/*"))
+                                }
+                                .padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Filled.PlaylistAdd,
+                                contentDescription = null,
+                                tint = if (state.importing) LyreonTextMuted else LyreonTextPrimary,
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(
+                                stringResource(
+                                    if (state.importing) R.string.library_importing else R.string.library_import_playlist,
+                                ),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = if (state.importing) LyreonTextMuted else LyreonTextPrimary,
+                            )
                         }
                     }
                     if (state.playlists.isEmpty()) {
@@ -326,6 +361,46 @@ fun LibraryScreen(
             dismissButton = {
                 TextButton(onClick = { playlistToDelete = null }) {
                     Text(stringResource(R.string.action_cancel), style = MaterialTheme.typography.labelMedium, color = LyreonTextSecondary)
+                }
+            },
+        )
+    }
+
+    state.importResult?.let { result ->
+        AlertDialog(
+            onDismissRequest = vm::clearImportResult,
+            containerColor = LyreonElevated,
+            title = { Text(stringResource(R.string.import_playlist_done), style = MaterialTheme.typography.labelMedium, color = LyreonTextPrimary) },
+            text = {
+                Text(
+                    stringResource(R.string.import_playlist_summary, result.playlistName, result.imported.size, result.skipped),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LyreonTextSecondary,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = vm::clearImportResult) {
+                    Text(stringResource(R.string.action_close), style = MaterialTheme.typography.labelMedium, color = LyreonTextPrimary)
+                }
+            },
+        )
+    }
+
+    if (state.importError) {
+        AlertDialog(
+            onDismissRequest = vm::clearImportError,
+            containerColor = LyreonElevated,
+            title = { Text(stringResource(R.string.import_playlist_failed_title), style = MaterialTheme.typography.labelMedium, color = LyreonCrimson) },
+            text = {
+                Text(
+                    stringResource(R.string.import_playlist_failed_body),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LyreonTextSecondary,
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = vm::clearImportError) {
+                    Text(stringResource(R.string.action_close), style = MaterialTheme.typography.labelMedium, color = LyreonTextPrimary)
                 }
             },
         )

@@ -67,6 +67,12 @@
     <string name="new_playlist_title">NEW PLAYLIST</string>
     <string name="new_playlist_hint">Playlist name…</string>
     <string name="playlist_created">Playlist \"%1$s\" created.</string>
+    <string name="library_import_playlist">Import playlist (m3u/pls)</string>
+    <string name="library_importing">Importing…</string>
+    <string name="import_playlist_done">PLAYLIST IMPORTED</string>
+    <string name="import_playlist_summary">\"%1$s\" created with %2$d songs. %3$d lines skipped.</string>
+    <string name="import_playlist_failed_title">IMPORT FAILED</string>
+    <string name="import_playlist_failed_body">The file couldn\'t be read or contains no recognized songs.</string>
 
     <string name="search_kicker">Explorer</string>
     <string name="search_title">Find your\nfavorite songs</string>
