@@ -80,6 +80,7 @@
     <string name="search_intro">Jelajahi jutaan lagu. Ketik judul, artis, atau album - Lyreon memutar audio saja, hemat kuota.</string>
     <string name="search_suggest">SARAN</string>
     <string name="search_results">HASIL · %1$d+</string>
+    <string name="search_local">DI PERANGKAT · %1$d</string>
     <string name="search_no_results">TIDAK ADA HASIL</string>
     <string name="search_no_results_body">Coba kata kunci lain atau ganti filter.</string>
     <string name="search_loading">Mencari di YouTube…</string>

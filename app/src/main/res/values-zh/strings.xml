@@ -74,6 +74,7 @@
     <string name="search_intro">探索数百万首歌曲。输入歌名、艺人或专辑 - Lyreon 仅播放音频，节省流量。</string>
     <string name="search_suggest">建议</string>
     <string name="search_results">结果 · %1$d+</string>
+    <string name="search_local">本机 · %1$d</string>
     <string name="search_no_results">没有结果</string>
     <string name="search_no_results_body">试试其他关键词或更换筛选。</string>
     <string name="search_loading">正在搜索 YouTube…</string>

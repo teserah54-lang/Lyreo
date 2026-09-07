@@ -74,6 +74,7 @@
     <string name="search_intro">Terokai berjuta lagu. Taip tajuk, artis atau album - Lyreon memainkan audio sahaja, jimat data.</string>
     <string name="search_suggest">CADANGAN</string>
     <string name="search_results">HASIL · %1$d+</string>
+    <string name="search_local">DI PERANTI · %1$d</string>
     <string name="search_no_results">TIADA HASIL</string>
     <string name="search_no_results_body">Cuba kata kunci lain atau tukar penapis.</string>
     <string name="search_loading">Mencari di YouTube…</string>

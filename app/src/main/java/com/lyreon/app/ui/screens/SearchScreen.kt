@@ -323,6 +323,26 @@ fun SearchScreen(
                 }
             }
 
+            // Lagu lokal perangkat — hasil pencarian sisi-device (filter SEMUA/LAGU).
+            // Ditampilkan sebelum hasil YouTube karena instan & paling relevan.
+            if (state.localTracks.isNotEmpty()) {
+                item { SectionRule(label = stringResource(R.string.search_local, state.localTracks.size)) }
+                itemsIndexed(state.localTracks, key = { _, t -> t.videoId }) { index, track ->
+                    TrackRow(
+                        track = track,
+                        isActive = playerState.currentTrack?.videoId == track.videoId,
+                        isPlaying = playerState.isPlaying,
+                        isLiked = likedIds.contains(track.videoId),
+                        isDownloaded = downloadedIds.contains(track.videoId),
+                        index = index,
+                        onPlay = { onPlayQueue(state.localTracks, index) },
+                        onLike = { onLike(track) },
+                        onMore = { onTrackMore(track) },
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
+                    )
+                }
+            }
+
             // Track hasil pencarian
             if (state.tracks.isNotEmpty()) {
                 item { SectionRule(label = stringResource(R.string.search_results, state.tracks.size)) }
@@ -368,8 +388,8 @@ fun SearchScreen(
                 }
             }
 
-            if (state.searched && !state.searching && state.tracks.isEmpty() && state.playlists.isEmpty() &&
-                state.artists.isEmpty() && state.albums.isEmpty() && state.error == null
+            if (state.searched && !state.searching && state.tracks.isEmpty() && state.localTracks.isEmpty() &&
+                state.playlists.isEmpty() && state.artists.isEmpty() && state.albums.isEmpty() && state.error == null
             ) {
                 item {
                     Column(

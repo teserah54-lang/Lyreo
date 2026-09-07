@@ -74,6 +74,7 @@
     <string name="search_intro">लाखों गाने खोजें। शीर्षक, कलाकार या एल्बम लिखें - Lyreon सिर्फ़ ऑडियो चलाता है, डेटा बचत।</string>
     <string name="search_suggest">सुझाव</string>
     <string name="search_results">परिणाम · %1$d+</string>
+    <string name="search_local">डिवाइस पर · %1$d</string>
     <string name="search_no_results">कोई परिणाम नहीं</string>
     <string name="search_no_results_body">कुछ और लिखकर देखें या फ़िल्टर बदलें।</string>
     <string name="search_loading">YouTube पर खोज जारी…</string>

@@ -74,6 +74,7 @@
     <string name="search_intro">Explore millions of songs. Type a title, artist, or album - Lyreon plays audio only to save data.</string>
     <string name="search_suggest">SUGGESTIONS</string>
     <string name="search_results">RESULTS · %1$d+</string>
+    <string name="search_local">ON DEVICE · %1$d</string>
     <string name="search_no_results">NO RESULTS</string>
     <string name="search_no_results_body">Try different keywords or change the filter.</string>
     <string name="search_loading">Searching YouTube…</string>

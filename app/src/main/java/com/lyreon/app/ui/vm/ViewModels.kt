@@ -372,6 +372,8 @@ data class SearchUiState(
     val filter: SearchFilter = SearchFilter.SONGS,
     val suggestions: List<String> = emptyList(),
     val tracks: List<LyreonTrack> = emptyList(),
+    /** Lagu dari perangkat (MediaStore + folder kustom) yang cocok dengan kueri. */
+    val localTracks: List<LyreonTrack> = emptyList(),
     val playlists: List<YtPlaylist> = emptyList(),
     val searching: Boolean = false,
     val loadingMore: Boolean = false,
@@ -490,6 +492,17 @@ class SearchViewModel(private val locator: ServiceLocator) : ViewModel() {
             // Dijalankan bersamaan supaya filter SEMUA tidak menunggu dua RTT.
             val musicDeferred = async { runCatching { youtube.musicSearch(q, filter) }.getOrDefault(MusicSearchSummary()) }
 
+            // Jalur ketiga PARALEL: musik lokal perangkat. Hanya untuk filter
+            // SEMUA/LAGU — VIDEO/ALBUM/ARTIS/PLAYLIST/PODCAST murni YouTube.
+            // MediaStore memakai SQL LIKE (murah); folder kustom di-walk. Tanpa
+            // izin baca audio → hasil kosong (bukan error), layar tetap jalan.
+            val includeLocal = filter == SearchFilter.SONGS || filter == SearchFilter.ALL
+            val localDeferred = async {
+                if (includeLocal) {
+                    runCatching { locator.local.search(q, limit = 60) }.getOrDefault(emptyList())
+                } else emptyList()
+            }
+
             // Filter ARTIS murni dari YouTube Music: extractor tidak punya jalur artis.
             if (filter == SearchFilter.ARTISTS) {
                 val summary = musicDeferred.await()
@@ -501,6 +514,7 @@ class SearchViewModel(private val locator: ServiceLocator) : ViewModel() {
                         artists = summary.artists,
                         albums = emptyList(),
                         tracks = summary.songs,
+                        localTracks = emptyList(),
                         playlists = emptyList(),
                         hasNext = false,
                         // Tanpa string error: keadaan kosong dirender layar
@@ -534,6 +548,7 @@ class SearchViewModel(private val locator: ServiceLocator) : ViewModel() {
                         musicSearching = false,
                         searched = true,
                         tracks = deduped,
+                        localTracks = localDeferred.await(),
                         playlists = outcome.playlists,
                         hasNext = s.hasNext,
                         artists = summary.artists,
@@ -560,6 +575,7 @@ class SearchViewModel(private val locator: ServiceLocator) : ViewModel() {
                             musicSearching = false,
                             searched = true,
                             tracks = deduped,
+                            localTracks = localDeferred.await(),
                             playlists = emptyList(),
                             hasNext = false,
                             artists = summary.artists,
@@ -574,6 +590,8 @@ class SearchViewModel(private val locator: ServiceLocator) : ViewModel() {
                             searching = false,
                             musicSearching = false,
                             searched = true,
+                            // Lagu lokal tetap ditampilkan walau YouTube gagal.
+                            localTracks = localDeferred.await(),
                             error = "Pencarian gagal: ${e.message ?: "jaringan"}",
                         )
                     }

@@ -74,6 +74,7 @@
     <string name="search_intro">数百万の曲を探そう。タイトル・アーティスト・アルバムを入力 - Lyreon は音声のみ再生でデータ節約。</string>
     <string name="search_suggest">候補</string>
     <string name="search_results">結果 · %1$d+</string>
+    <string name="search_local">デバイス内 · %1$d</string>
     <string name="search_no_results">結果なし</string>
     <string name="search_no_results_body">別のキーワードを試すか、フィルターを変えてみてください。</string>
     <string name="search_loading">YouTube を検索中…</string>

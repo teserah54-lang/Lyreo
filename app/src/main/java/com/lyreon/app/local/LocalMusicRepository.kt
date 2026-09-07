@@ -9,6 +9,7 @@ import android.content.ContentUris
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.database.Cursor
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
@@ -65,59 +66,124 @@ class LocalMusicRepository(private val context: Context) {
         runCatching { queryStore() }.getOrDefault(emptyList())
     }
 
-    private fun queryStore(): List<LyreonTrack> {
-        val projection = arrayOf(
-            MediaStore.Audio.Media._ID,
-            MediaStore.Audio.Media.TITLE,
-            MediaStore.Audio.Media.ARTIST,
-            MediaStore.Audio.Media.ALBUM,
-            MediaStore.Audio.Media.DURATION,
-        )
-        // Longgar: JANGAN pakai IS_MUSIC (membuang banyak file asli pengguna).
-        // Cukup singkirkan suara sistem & rekaman voice memo.
-        val selection = buildString {
-            append("${MediaStore.Audio.Media.IS_RINGTONE} = 0")
-            append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
-            append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                append(" AND ${MediaStore.Audio.Media.IS_RECORDING} = 0")
-            }
-        }
-        // Sortir polos — ekspresi COLLATE bisa ditolak provider beberapa OEM
-        val sort = "${MediaStore.Audio.Media.TITLE} ASC"
+    /**
+     * Cari musik lokal (MediaStore + folder kustom) yang judul/artis/albumnya
+     * cocok dengan [query]. MediaStore memakai SQL `LIKE` (cepat, tanpa memuat
+     * seluruh perpustakaan); folder kustom disaring di memori karena isinya baru
+     * diketahui setelah di-walk. Dipakai pencarian di layar Search.
+     */
+    suspend fun search(query: String, limit: Int = 50): List<LyreonTrack> = withContext(Dispatchers.IO) {
+        if (!hasPermission()) return@withContext emptyList()
+        val q = query.trim()
+        if (q.isBlank()) return@withContext emptyList()
 
+        val store = runCatching { searchStore(q, limit) }.getOrDefault(emptyList())
+        val saf = runCatching { scanTrees() }.getOrDefault(emptyList())
+            .filter { matches(it, q) }
+
+        // Satukan dua jalur + dedupe judul (konsisten dengan layar Musik Lokal).
+        val seen = HashSet<String>()
+        return@withContext (store + saf)
+            .filter { t -> seen.add(t.title.lowercase().trim()) }
+            .take(limit)
+    }
+
+    private val storeProjection = arrayOf(
+        MediaStore.Audio.Media._ID,
+        MediaStore.Audio.Media.TITLE,
+        MediaStore.Audio.Media.ARTIST,
+        MediaStore.Audio.Media.ALBUM,
+        MediaStore.Audio.Media.DURATION,
+    )
+
+    /**
+     * Seleksi dasar MediaStore — Longgar: JANGAN pakai `IS_MUSIC` (membuang
+     * banyak file asli pengguna). Cukup singkirkan suara sistem & voice memo.
+     */
+    private fun baseSelection(): String = buildString {
+        append("${MediaStore.Audio.Media.IS_RINGTONE} = 0")
+        append(" AND ${MediaStore.Audio.Media.IS_NOTIFICATION} = 0")
+        append(" AND ${MediaStore.Audio.Media.IS_ALARM} = 0")
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            append(" AND ${MediaStore.Audio.Media.IS_RECORDING} = 0")
+        }
+    }
+
+    /**
+     * Kueri MediaStore. [match] adalah kondisi SQL tambahan (mis. LIKE judul/
+     * artis/album untuk pencarian) — boleh kosong untuk pemindaian penuh.
+     * Sortir polos — ekspresi COLLATE bisa ditolak provider beberapa OEM.
+     */
+    private fun queryStore(
+        match: String = "",
+        args: Array<String>? = null,
+        limit: Int = Int.MAX_VALUE,
+    ): List<LyreonTrack> {
+        val selection = baseSelection() + if (match.isBlank()) "" else " AND ($match)"
         val out = mutableListOf<LyreonTrack>()
         context.contentResolver.query(
             MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
-            projection,
+            storeProjection,
             selection,
-            null,
-            sort,
+            args,
+            "${MediaStore.Audio.Media.TITLE} ASC",
         )?.use { cursor ->
             val colId = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
             val colTitle = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
             val colArtist = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
             val colAlbum = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
             val colDuration = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
-
-            while (cursor.moveToNext()) {
-                val id = cursor.getLong(colId)
-                val durationMs = cursor.getLong(colDuration)
-                val title = cursor.getString(colTitle).orEmpty()
-                // Saring audio sangat pendek & entri tanpa judul
-                if (durationMs < 10_000L || title.isBlank()) continue
-                out += LyreonTrack(
-                    videoId = LOCAL_ID_PREFIX + id,
-                    title = title,
-                    artist = cursor.getString(colArtist).orEmpty()
-                        .removePrefix("<unknown>").trim(),
-                    album = cursor.getString(colAlbum).orEmpty(),
-                    durationSec = durationMs / 1000L,
-                    thumbnailUrl = cachedArt("ms_$id") ?: "",
-                )
+            while (cursor.moveToNext() && out.size < limit) {
+                storeTrack(cursor, colId, colTitle, colArtist, colAlbum, colDuration)?.let(out::add)
             }
         }
         return out
+    }
+
+    private fun storeTrack(
+        cursor: Cursor,
+        colId: Int,
+        colTitle: Int,
+        colArtist: Int,
+        colAlbum: Int,
+        colDuration: Int,
+    ): LyreonTrack? {
+        val id = cursor.getLong(colId)
+        val durationMs = cursor.getLong(colDuration)
+        val title = cursor.getString(colTitle).orEmpty()
+        // Saring audio sangat pendek & entri tanpa judul
+        if (durationMs < 10_000L || title.isBlank()) return null
+        return LyreonTrack(
+            videoId = LOCAL_ID_PREFIX + id,
+            title = title,
+            artist = cursor.getString(colArtist).orEmpty()
+                .removePrefix("<unknown>").trim(),
+            album = cursor.getString(colAlbum).orEmpty(),
+            durationSec = durationMs / 1000L,
+            thumbnailUrl = cachedArt("ms_$id") ?: "",
+        )
+    }
+
+    private fun searchStore(query: String, limit: Int): List<LyreonTrack> {
+        val like = "%${escapeLike(query)}%"
+        val match = buildString {
+            append("${MediaStore.Audio.Media.TITLE} LIKE ? ESCAPE '\\'")
+            append(" OR ${MediaStore.Audio.Media.ARTIST} LIKE ? ESCAPE '\\'")
+            append(" OR ${MediaStore.Audio.Media.ALBUM} LIKE ? ESCAPE '\\'")
+        }
+        return queryStore(match, arrayOf(like, like, like), limit)
+    }
+
+    /** Escape wildcard `LIKE` (`%`, `_`, `\`) supaya kueri pengguna harfiah. */
+    private fun escapeLike(s: String): String =
+        s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+    /** Cocokkan nama/judul/artis/album sebuah track terhadap kueri (tanpa case). */
+    private fun matches(track: LyreonTrack, query: String): Boolean {
+        val q = query.lowercase()
+        return track.title.lowercase().contains(q) ||
+            track.artist.lowercase().contains(q) ||
+            track.album.lowercase().contains(q)
     }
 
     // ------------------------------------------------------------------
