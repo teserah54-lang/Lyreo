@@ -32,8 +32,8 @@ fun Artwork(
     url: String,
     title: String,
     modifier: Modifier = Modifier,
-    // null = isi mengikuti kendala induk (dipakai shared element transition,
-    // di mana ukuran artwork dianimasikan oleh SharedTransitionLayout).
+    // null = isi mengikuti kendala induk (dipakai artwork mini player 44dp,
+    // yang ukurannya tetap — lihat catatan di MiniPlayerBar).
     size: Dp? = 56.dp,
     cornerRadius: Dp = 0.dp,
     bordered: Boolean = false,

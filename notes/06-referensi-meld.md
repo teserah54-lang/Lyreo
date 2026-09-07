@@ -201,6 +201,21 @@ Sumber posisi: `PlayerManager.positionNow()` (baca `MediaController.currentPosit
 langsung, poll 50 ms) — mengikuti cara Meld membaca `playerConnection.player.currentPosition`
 di loop lirik alih-alih berlangganan ticker UI 500 ms.
 
+### 4d. Porting UI/tema/temuan (gelombang 4 — 2026-09-07)
+
+| Dari Meld (GPL-3.0) | Ke Lyreon | Catatan adaptasi |
+|---|---|---|
+| `ui/theme/PlayerColorExtractor.kt` (swatch Palette berbobot + enhance vividness) | `ui/theme/PlayerColorExtractor.kt` + `ui/theme/ArtworkAccent.kt` | dependensi baru `androidx.palette:palette-ktx:1.0.0`; bitmap 100×100 via `SingletonImageLoader` Coil (memperbaiki bug lama: `rememberDynamicArtworkPalette` dulu membuat `ImageLoader` BARU tiap ekstraksi — cache memori tidak pernah terpakai); bobot swatch = populasi×2 × bonus vibrancy × (sat+val)/2, vividness sat×1.3/×1.1 & nilai 0.4–0.85 — konstanta Meld; gradien dua warna (utama + sekunder gelap) untuk latar ambien Now Playing |
+| `innertube/.../YouTube.getChartsPage()` + `pages/ChartsPage.kt` (`FEmusic_charts`, params `ggMGCgQIgAQ%3D`) | `YouTubeRepository.fetchChartsPage()` + `trending()` | sumber "Tren di &lt;negara&gt;" diganti dari feed Trending YouTube umum (berisi live/podcast/vlog) ke charts YouTube Music (lagu resmi); parse musicShelfRenderer: rak artis (`browseEndpoint`) + rak lagu (`watchEndpoint.videoId`, durasi kolom teks); feed umum tetap jadi cadangan tapi difilter `musicEligible()` (StreamType + durasi) — lihat `notes/01` §B8 |
+| `ui/player/Queue.kt` (antrean: SwipeToDismissBox per baris, gulir otomatis ke lagu aktif, aksi acak) | lembar antrean `NowPlayingScreen.kt` | geser-kiri = hapus dari antrean, `LaunchedEffect` menggulir ke `currentIndex` saat lembar dibuka/lagu berganti, tombol acak di header lembar, lembar tinggi 88% layar dengan daftar `weight(1f)`; urutan ↑/↓ tetap (drag-and-drop penuh Meld butuh library reorder — belum) |
+| `ui/screens/search/OnlineSearchResult.kt` (filter default = "SEMUA" → halaman ringkasan) | `SearchUiState.filter = SearchFilter.ALL` | tab pertama hasil pencarian kini SEMUA (lagu+artis+album+playlist+lokal sekaligus), sebelumnya LAGU |
+| `ui/player/Player.kt` (`showInlineLyrics` mengganti seluruh area konten utama) | `LyricsFullPage` di `NowPlayingScreen.kt` | lirik kini HALAMAN PENUH (latar artwork blur + skrim, bilah atas tutup, `LyricsContent` `weight(1f)` tanpa bingkai), bukan lagi lirik di dalam kotak artwork |
+| (desain sendiri, bukan Meld: Meld hanya slide `it/8` + fade) | `ui/theme/MotionBlur.kt` `pageMotionBlur` | motion blur transisi SUNGGUHAN per-halaman: radius diturunkan dari progres `transition` entry NavHost (PreEnter→Visible→PostExit), dominan sumbu-X ala iOS, RenderEffect ter-cache; menggantikan `pulse()` 90 ms di kontainer yang hanya menghasilkan "kedipan blur". Gulir cepat tetap memakai lapis kontainer kecil |
+
+**Yang sengaja tidak diikuti dari Meld (gelombang 4):** shared-element morph artwork
+mini player ⇄ player (Meld tidak memakainya; di Lyreon morph itu pernah macet —
+`notes/01` §B7), dan drag-and-drop antrean penuh (menunggu keputusan library).
+
 ## 5. Cara memakai Meld sebagai rujukan harian
 
 1. Lagu gagal massal → `bash tools/ci/meld-client-radar.sh` (drift spesifikasi).

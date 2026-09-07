@@ -215,6 +215,47 @@ relevan sebagai pencegah.
   ```
   Aturan umum: path/glob di dalam KDoc ditulis tanpa karakter bintang ganda.
 
+### B7. Shared-element morph artwork macet raksasa saat tema berganti (2026-09-07)
+
+- **Gejala:** memutar lagu → Now Playing terbuka → aksen tema berganti mengikuti
+  palet sampul (ekstraksi selesai ±ratusan ms kemudian). Yang terlihat bukan
+  perubahan warna, melainkan artwork "membesar" sampai menutupi layar dan tombol
+  tutup — pengguna terjebak di halaman musik. Sangat menjebak karena tidak ada
+  crash: hanya UI yang rusak.
+- **Sebab:** morph `sharedBounds` mini player ⇄ Now Playing berjalan bersamaan
+  dengan recomposisi tema (aksen sampul). Saat sumber bounds (mini player yang
+  sedang animasi keluar karena chrome disembunyikan) berubah identitas di tengah
+  penerbangan, animasi bounds shared element bisa berhenti di ukuran intermediate
+  terbesar. Fitur tema dan fitur transisi masing-masing "benar" — gabungannya
+  yang rusak, dan itu tidak pernah terlihat saat diuji terpisah.
+- **Perbaikan (2026-09-07):** hapus shared-element morph sama sekali — pola Meld:
+  player naik sebagai layar biasa (geser + pudar), artwork tidak berubah ukuran.
+  Rasa "mengalir" datang dari motion blur per-halaman (`pageMotionBlur`).
+- **Pencegah:** jangan menggabungkan `SharedTransitionLayout`/`sharedBounds`
+  dengan state global yang recompose seluruh pohon tema di tengah transisi
+  (aksen artwork adalah contohnya). Kalau memang harus, uji dengan lagu yang
+  sampulnya berwarna mencolok + toggle aksen sampel AKTIF — bukan dengan aksen
+  yang kebetulan sama dengan warna sebelumnya.
+
+### B8. "Live streaming" lolos filter durasi karena durasinya terus bertambah (2026-09-07)
+
+- **Gejala:** Beranda menampilkan siaran langsung (podcast siniar jam-jam, live
+  gaming) di seksi "Tren", seolah-olah itu lagu tren. Filter `durationSec > 60`
+  yang seharusnya membuang live ternyata tidak cukup.
+- **Sebab:** siaran langsung yang sudah berjalan 3 jam melaporkan `duration`
+  ≈ 3 jam (durasi berjalan), bukan −1. Item live berdurasi panjang jadi lolos
+  semua filter berbasis durasi. `StreamType` (LIVE_STREAM/POST_LIVE_STREAM)
+  tidak pernah diperiksa.
+- **Perbaikan:** (1) sumber tren diganti ke **charts YouTube Music**
+  (`FEmusic_charts`, params `ggMGCgQIgAQ%3D` — pola Meld `ChartsPage`): daftar
+  lagu resmi, bebas siaran langsung; (2) semua feed musik (tren-cadangan, radio
+  terkait, quick picks) memakai `musicEligible()` yang memeriksa `StreamType`
+  DAN menjepit durasi; (3) hasil pencarian membuang live yang sedang berjalan
+  (`isOngoingLive`).
+- **Pencegah:** setiap kali memakai item YouTube di konteks musik, tanyakan dua
+  hal: `StreamType`-nya apa, dan durasinya realistis untuk lagu (≤ 1 jam)?
+  Filter durasi saja tidak pernah cukup untuk mengenali live.
+
 ## C. Daftar periksa cepat sebelum menyimpulkan "ini salah YouTube"
 
 1. `visitor=` di SALIN DIAGNOSTIK bukan `-`? Kalau `-`, perbaiki itu dulu.

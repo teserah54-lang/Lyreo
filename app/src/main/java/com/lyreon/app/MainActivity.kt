@@ -7,9 +7,6 @@ package com.lyreon.app
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -111,7 +108,7 @@ import com.lyreon.app.ui.theme.LyreonAccentSoft
 import com.lyreon.app.ui.theme.LyreonChromeShape
 import com.lyreon.app.ui.theme.LyreonHairline
 import com.lyreon.app.ui.theme.LyreonSurfaceTranslucent
-import com.lyreon.app.ui.theme.MotionBlurTransitionRadius
+import com.lyreon.app.ui.theme.MotionBlurScrollRadius
 import com.lyreon.app.ui.theme.NO_ARTWORK_ACCENT
 import com.lyreon.app.ui.theme.artworkAccentArgb
 import com.lyreon.app.ui.theme.deviceSupportsMotionBlur
@@ -119,10 +116,8 @@ import com.lyreon.app.ui.theme.lyreonScreenEnter
 import com.lyreon.app.ui.theme.lyreonScreenExit
 import com.lyreon.app.ui.theme.lyreonScreenPopEnter
 import com.lyreon.app.ui.theme.lyreonScreenPopExit
-import com.lyreon.app.ui.theme.lyreonSharedBoundsTransform
-import com.lyreon.app.ui.theme.lyreonSharedEnter
-import com.lyreon.app.ui.theme.lyreonSharedExit
 import com.lyreon.app.ui.theme.motionBlurLayer
+import com.lyreon.app.ui.theme.pageMotionBlur
 import com.lyreon.app.ui.theme.rememberMotionBlurState
 import com.lyreon.app.ui.theme.reduceMotionEnabled
 import com.lyreon.app.ui.theme.resetArtworkAccent
@@ -140,7 +135,6 @@ import com.lyreon.app.ui.vm.SettingsViewModel
 import com.lyreon.app.ui.vm.YtPlaylistViewModel
 import com.lyreon.app.ui.vm.lyreonViewModel
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -232,7 +226,6 @@ private val primaryDestinations = listOf(
     Dest("settings", R.string.nav_profile, Icons.Filled.Person, Icons.Outlined.Person),
 )
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun LyreonRoot(
     intentState: androidx.compose.runtime.State<Intent?>,
@@ -255,21 +248,22 @@ fun LyreonRoot(
     val route = backStack?.destination?.route.orEmpty()
 
     // ---- Smooth motion blur ----
-    // SATU lapis untuk seluruh isi: transisi layar memicunya penuh (14dp sesaat),
-    // gulir cepat memicu versi kecilnya (~4dp). Saat diam tidak ada RenderEffect
-    // sama sekali, jadi biaya idle nol. Mati total bila reduce motion aktif,
-    // pengguna mematikannya, atau perangkat rendah memori.
+    // Dua sumber gerak, dua perlakuan (lihat ui/theme/MotionBlur.kt):
+    //  A. TRANSISI LAYAR: setiap halaman NavHost membawa blur-nya sendiri
+    //     (Modifier.pageMotionBlur) — radius diturunkan dari progres transisi
+    //     halaman itu, bukan animasi terpisah di kontainer. Tidak ada lagi
+    //     `pulse()` di sini: pulse 90 ms di kontainer adalah blur "kedipan",
+    //     bukan motion blur yang mengikuti halaman bergerak.
+    //  B. GULIR CEPAT: satu koneksi nested scroll di induk semua daftar,
+    //     memicu versi kecilnya (~4dp) di kontainer ini.
+    // Saat diam tidak ada RenderEffect sama sekali (biaya idle nol). Mati
+    // total bila reduce motion aktif, pengguna mematikannya, atau perangkat
+    // rendah memori / pra-Android 12.
     val motionBlurState = rememberMotionBlurState()
     val blurContext = androidx.compose.ui.platform.LocalContext.current
     val systemReduced = remember { !systemAnimatorsEnabled() }
     val blurActive = remember(blurContext, motionBlurEnabled, systemReduced) {
         motionBlurEnabled && !systemReduced && deviceSupportsMotionBlur(blurContext)
-    }
-    LaunchedEffect(route, blurActive) {
-        if (!blurActive) return@LaunchedEffect
-        motionBlurState.pulse()
-        delay(90)
-        motionBlurState.release()
     }
 
     val hideChrome = route.startsWith("now_playing") || route.startsWith("editorial") ||
@@ -416,22 +410,23 @@ fun LyreonRoot(
         }
     }
 
-    SharedTransitionLayout(modifier = Modifier.fillMaxSize().background(LyreonBackground)) {
-        val transitionScope = this
-        // Satu state bersama untuk morph artwork mini player ⇄ Now Playing.
-        val npArtworkState = rememberSharedContentState(key = "now_playing_artwork")
-
+    // CATATAN RIWAYAT (2026-09-07): blok ini dulu dibungkus SharedTransitionLayout
+    // dengan morph artwork mini player ⇄ Now Playing (sharedBounds). Morph itu
+    // rapuh: saat aksen tema berganti di tengah transisi (ekstraksi palet sampul
+    // selesai beberapa ratus ms setelah halaman dibuka), bounds shared element
+    // bisa macet di ukuran raksasa sehingga artwork "membesar" dan menutup
+    // tombol tutup — pengguna terjebak di halaman musik. Pola Meld tidak
+    // memakai shared-element morph sama sekali: playernya naik sebagai lembar
+    // dengan geser+pudar biasa, artwork tidak berubah ukuran. Kita mengikuti
+    // pola itu; motion blur per-halaman sekarang yang memberi rasa "mengalir".
+    Box(Modifier.fillMaxSize().background(LyreonBackground)) {
         val miniPlayer: @Composable () -> Unit = {
             MiniPlayerBar(
                 track = playerState.currentTrack,
                 isPlaying = playerState.isPlaying,
                 isBuffering = playerState.isBuffering,
                 player = player,
-                // Tetap dikomposisi (animasi keluar) saat chrome disembunyikan,
-                // supaya shared transition punya bounds sumber saat Now Playing masuk.
                 visible = !hideChrome,
-                sharedElementScope = transitionScope,
-                sharedContentState = npArtworkState,
                 onToggle = player::toggle,
                 onNext = player::next,
                 onOpen = { navController.navigate("now_playing") },
@@ -529,10 +524,12 @@ fun LyreonRoot(
                         .weight(1f)
                         // Koneksi nested scroll dipasang di INDUK semua layar: satu
                         // koneksi melayani setiap LazyColumn tanpa biaya per item.
+                        // Radius lapisan ini khusus GULIR (kecil); transisi layar
+                        // punya lapis per-halaman sendiri (pageMotionBlur).
                         .scrollMotionBlur(motionBlurState, enabled = blurActive)
                         .motionBlurLayer(
                             state = motionBlurState,
-                            maxRadius = MotionBlurTransitionRadius,
+                            maxRadius = MotionBlurScrollRadius,
                             enabled = blurActive,
                         ),
                 ) {
@@ -548,13 +545,12 @@ fun LyreonRoot(
                         likedIds = likedIds,
                         downloadedIds = downloadedIds,
                         reduceMotion = reduceMotionEnabled,
+                        motionBlurEnabled = blurActive,
                         onLike = ::likeTrack,
                         onMore = ::openTrackActions,
                         onEnqueueDownload = ::enqueueDownload,
                         onSleepTimerClick = { showSleepTimer = true },
                         playMovement = ::playQueryMovement,
-                        sharedTransitionScope = transitionScope,
-                        npArtworkState = npArtworkState,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -625,7 +621,6 @@ fun LyreonRoot(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun LyreonNavHost(
     navController: NavHostController,
@@ -635,19 +630,32 @@ private fun LyreonNavHost(
     likedIds: Set<String>,
     downloadedIds: Set<String>,
     reduceMotion: Boolean = false,
+    motionBlurEnabled: Boolean = true,
     onLike: (LyreonTrack) -> Unit,
     onMore: (LyreonTrack) -> Unit,
     onEnqueueDownload: (LyreonTrack) -> Unit,
     onSleepTimerClick: () -> Unit,
     playMovement: (String) -> Unit,
-    sharedTransitionScope: SharedTransitionScope,
-    npArtworkState: SharedTransitionScope.SharedContentState,
     modifier: Modifier = Modifier,
 ) {
     val player = locator.player
 
+    // Halaman + motion blur per-halaman: scope animasi entry NavHost diteruskan
+    // ke Modifier.pageMotionBlur sehingga radius blur mengikuti progres geser
+    // halaman ITU (bukan pulse global). Lihat ui/theme/MotionBlur.kt.
+    @Composable
+    fun page(scope: androidx.compose.animation.AnimatedVisibilityScope, content: @Composable () -> Unit) {
+        Box(
+            Modifier
+                .fillMaxSize()
+                .pageMotionBlur(scope, enabled = motionBlurEnabled),
+        ) {
+            content()
+        }
+    }
+
     // Transisi antar-layar: geser kecil + pudar (spring tenang), dipasangkan
-    // dengan motion blur di LyreonRoot. Sebelumnya semua transisi None sehingga
+    // dengan motion blur per-halaman. Sebelumnya semua transisi None sehingga
     // pindah layar terasa "melompat".
     NavHost(
         navController = navController,
@@ -660,110 +668,124 @@ private fun LyreonNavHost(
     ) {
         composable("home") {
             val vm: HomeViewModel = lyreonViewModel { HomeViewModel(it) }
-            HomeScreen(
-                vm = vm,
-                playerState = playerState,
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-                onTogglePlay = player::toggle,
-                onOpenTrack = { navController.navigate("now_playing") },
-                onTrackMore = onMore,
-                onLike = onLike,
-                likedIds = likedIds,
-                downloadedIds = downloadedIds,
-                onOpenEditorial = { navController.navigate("editorial/${it.id}") },
-                onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
-                },
-                onSearchClick = {
-                    navController.navigate("search") {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-            )
+            page(this) {
+                HomeScreen(
+                    vm = vm,
+                    playerState = playerState,
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                    onTogglePlay = player::toggle,
+                    onOpenTrack = { navController.navigate("now_playing") },
+                    onTrackMore = onMore,
+                    onLike = onLike,
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                    onOpenEditorial = { navController.navigate("editorial/${it.id}") },
+                    onOpenBrowse = { id, name ->
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    },
+                    onSearchClick = {
+                        navController.navigate("search") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                )
+            }
         }
 
         composable("search") {
             val vm: SearchViewModel = lyreonViewModel { SearchViewModel(it) }
-            SearchScreen(
-                vm = vm,
-                playerState = playerState,
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-                onTrackMore = onMore,
-                onLike = onLike,
-                onOpenYtPlaylist = { pl: YtPlaylist ->
-                    val encoded = Uri.encode(pl.url)
-                    navController.navigate("ytplaylist/$encoded")
-                },
-                onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
-                },
-                likedIds = likedIds,
-                downloadedIds = downloadedIds,
-            )
+            page(this) {
+                SearchScreen(
+                    vm = vm,
+                    playerState = playerState,
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                    onTrackMore = onMore,
+                    onLike = onLike,
+                    onOpenYtPlaylist = { pl: YtPlaylist ->
+                        val encoded = Uri.encode(pl.url)
+                        navController.navigate("ytplaylist/$encoded")
+                    },
+                    onOpenBrowse = { id, name ->
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    },
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                )
+            }
         }
 
         composable("library") {
             val vm: LibraryViewModel = lyreonViewModel { LibraryViewModel(it) }
-            LibraryScreen(
-                vm = vm,
-                playerState = playerState,
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-                onTrackMore = onMore,
-                onLike = onLike,
-                onOpenPlaylist = { id, name ->
-                    navController.navigate("playlist/$id?name=${Uri.encode(name)}")
-                },
-                likedIds = likedIds,
-                downloadedIds = downloadedIds,
-            )
+            page(this) {
+                LibraryScreen(
+                    vm = vm,
+                    playerState = playerState,
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                    onTrackMore = onMore,
+                    onLike = onLike,
+                    onOpenPlaylist = { id, name ->
+                        navController.navigate("playlist/$id?name=${Uri.encode(name)}")
+                    },
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                )
+            }
         }
 
         composable("playlists") {
             val vm: LibraryViewModel = lyreonViewModel(key = "playlists_tab") { LibraryViewModel(it) }
-            LibraryScreen(
-                vm = vm,
-                initialTab = 1,
-                playerState = playerState,
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-                onTrackMore = onMore,
-                onLike = onLike,
-                onOpenPlaylist = { id, name ->
-                    navController.navigate("playlist/$id?name=${Uri.encode(name)}")
-                },
-                likedIds = likedIds,
-                downloadedIds = downloadedIds,
-            )
+            page(this) {
+                LibraryScreen(
+                    vm = vm,
+                    initialTab = 1,
+                    playerState = playerState,
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                    onTrackMore = onMore,
+                    onLike = onLike,
+                    onOpenPlaylist = { id, name ->
+                        navController.navigate("playlist/$id?name=${Uri.encode(name)}")
+                    },
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                )
+            }
         }
 
         composable("archive") {
-            ArchiveScreen(
-                playerState = playerState,
-                onOpenEditorial = { navController.navigate("editorial/${it.id}") },
-                onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
-                },
-                onPlayMovement = { playMovement(it.searchQuery) },
-            )
+            page(this) {
+                ArchiveScreen(
+                    playerState = playerState,
+                    onOpenEditorial = { navController.navigate("editorial/${it.id}") },
+                    onOpenBrowse = { id, name ->
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    },
+                    onPlayMovement = { playMovement(it.searchQuery) },
+                )
+            }
         }
 
         composable("downloads") {
             val vm: DownloadsViewModel = lyreonViewModel { DownloadsViewModel(it) }
-            DownloadsScreen(
-                vm = vm,
-                playerState = playerState,
-                onBack = { navController.popBackStack() },
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-            )
+            page(this) {
+                DownloadsScreen(
+                    vm = vm,
+                    playerState = playerState,
+                    onBack = { navController.popBackStack() },
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                )
+            }
         }
 
         composable("settings") {
             val vm: SettingsViewModel = lyreonViewModel { SettingsViewModel(it) }
-            SettingsScreen(
-                vm = vm,
-                onOpenLicenses = { navController.navigate("licenses") { launchSingleTop = true } },
-            )
+            page(this) {
+                SettingsScreen(
+                    vm = vm,
+                    onOpenLicenses = { navController.navigate("licenses") { launchSingleTop = true } },
+                )
+            }
         }
 
         composable(
@@ -780,34 +802,38 @@ private fun LyreonNavHost(
             val vm: BrowseViewModel = lyreonViewModel(key = "browse_$browseId$params") {
                 BrowseViewModel(it, browseId, params)
             }
-            BrowseScreen(
-                vm = vm,
-                fallbackTitle = title,
-                playerState = playerState,
-                likedIds = likedIds,
-                downloadedIds = downloadedIds,
-                onBack = { navController.popBackStack() },
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-                onLike = onLike,
-                onTrackMore = onMore,
-                onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
-                },
-                onOpenPlaylist = { playlistId ->
-                    val url = "https://music.youtube.com/playlist?list=$playlistId"
-                    navController.navigate("ytplaylist/${Uri.encode(url)}")
-                },
-                // Radio artis: benih lagu teratas halaman, antrean langsung diisi
-                // lagu terkait oleh PlayerManager.startRadio.
-                onStartRadio = { seed ->
-                    player.startRadio(seed)
-                    navController.navigate("now_playing")
-                },
-            )
+            page(this) {
+                BrowseScreen(
+                    vm = vm,
+                    fallbackTitle = title,
+                    playerState = playerState,
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                    onBack = { navController.popBackStack() },
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                    onLike = onLike,
+                    onTrackMore = onMore,
+                    onOpenBrowse = { id, name ->
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    },
+                    onOpenPlaylist = { playlistId ->
+                        val url = "https://music.youtube.com/playlist?list=$playlistId"
+                        navController.navigate("ytplaylist/${Uri.encode(url)}")
+                    },
+                    // Radio artis: benih lagu teratas halaman, antrean langsung diisi
+                    // lagu terkait oleh PlayerManager.startRadio.
+                    onStartRadio = { seed ->
+                        player.startRadio(seed)
+                        navController.navigate("now_playing")
+                    },
+                )
+            }
         }
 
         composable("licenses") {
-            LicensesScreen(onBack = { navController.popBackStack() })
+            page(this) {
+                LicensesScreen(onBack = { navController.popBackStack() })
+            }
         }
 
         composable(
@@ -820,19 +846,21 @@ private fun LyreonNavHost(
             val id = entry.arguments?.getLong("id") ?: return@composable
             val name = entry.arguments?.getString("name").orEmpty()
             val vm: PlaylistViewModel = lyreonViewModel(key = "pl$id") { PlaylistViewModel(it, id) }
-            PlaylistDetailScreen(
-                vm = vm,
-                playlistName = name,
-                playerState = playerState,
-                onBack = { navController.popBackStack() },
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-                onSetShuffle = player::setShuffle,
-                onTrackMore = onMore,
-                onLike = onLike,
-                likedIds = likedIds,
-                downloadedIds = downloadedIds,
-                onDelete = { navController.popBackStack() },
-            )
+            page(this) {
+                PlaylistDetailScreen(
+                    vm = vm,
+                    playlistName = name,
+                    playerState = playerState,
+                    onBack = { navController.popBackStack() },
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                    onSetShuffle = player::setShuffle,
+                    onTrackMore = onMore,
+                    onLike = onLike,
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                    onDelete = { navController.popBackStack() },
+                )
+            }
         }
 
         composable(
@@ -841,65 +869,58 @@ private fun LyreonNavHost(
         ) { entry ->
             val url = Uri.decode(entry.arguments?.getString("url").orEmpty())
             val vm: YtPlaylistViewModel = lyreonViewModel(key = url) { YtPlaylistViewModel(it, url) }
-            YtPlaylistScreen(
-                vm = vm,
-                playerState = playerState,
-                onBack = { navController.popBackStack() },
-                onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
-                onAppendQueue = { tracks -> player.appendAll(tracks) },
-                onTrackMore = onMore,
-                onLike = onLike,
-                likedIds = likedIds,
-                downloadedIds = downloadedIds,
-            )
+            page(this) {
+                YtPlaylistScreen(
+                    vm = vm,
+                    playerState = playerState,
+                    onBack = { navController.popBackStack() },
+                    onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
+                    onAppendQueue = { tracks -> player.appendAll(tracks) },
+                    onTrackMore = onMore,
+                    onLike = onLike,
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                )
+            }
         }
 
         composable("now_playing") {
             val current = playerState.currentTrack
-            // Shared bounds dengan artwork mini player (sumber morph saat masuk).
-            val artworkSharedModifier = with(sharedTransitionScope) {
-                Modifier.sharedBounds(
-                    npArtworkState,
-                    animatedVisibilityScope = this@composable,
-                    enter = lyreonSharedEnter(),
-                    exit = lyreonSharedExit(),
-                    boundsTransform = lyreonSharedBoundsTransform(),
+            page(this) {
+                NowPlayingScreen(
+                    playerState = playerState,
+                    player = player,
+                    videoMode = videoMode,
+                    controller = player.mediaController,
+                    onSetVideoMode = player::setVideoMode,
+                    onSeekMs = player::seekTo,
+                    isLiked = current?.let { likedIds.contains(it.videoId) } == true,
+                    isDownloaded = current?.let { downloadedIds.contains(it.videoId) } == true,
+                    onBack = { navController.popBackStack() },
+                    onToggle = player::toggle,
+                    onNext = player::next,
+                    onPrev = player::previous,
+                    onSeekFraction = player::seekToFraction,
+                    onShuffle = player::setShuffle,
+                    onCycleRepeat = player::cycleRepeat,
+                    onLike = { current?.let(onLike) },
+                    onDownload = { current?.let(onEnqueueDownload) },
+                    onAddToPlaylist = { current?.let(onMore) },
+                    onSleepTimer = onSleepTimerClick,
+                    onShare = {
+                        current?.let { t ->
+                            val send = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_TEXT, "Lyreon · ${t.title} - ${t.artist}\n${t.watchUrl}")
+                            }
+                            navController.context.startActivity(Intent.createChooser(send, "Bagikan lagu"))
+                        }
+                    },
+                    onPlayAt = player::playAt,
+                    onRemoveQueueItem = player::removeAt,
+                    onMoveQueueItem = player::moveItem,
                 )
             }
-            NowPlayingScreen(
-                playerState = playerState,
-                artworkSharedModifier = artworkSharedModifier,
-                player = player,
-                videoMode = videoMode,
-                controller = player.mediaController,
-                onSetVideoMode = player::setVideoMode,
-                onSeekMs = player::seekTo,
-                isLiked = current?.let { likedIds.contains(it.videoId) } == true,
-                isDownloaded = current?.let { downloadedIds.contains(it.videoId) } == true,
-                onBack = { navController.popBackStack() },
-                onToggle = player::toggle,
-                onNext = player::next,
-                onPrev = player::previous,
-                onSeekFraction = player::seekToFraction,
-                onShuffle = player::setShuffle,
-                onCycleRepeat = player::cycleRepeat,
-                onLike = { current?.let(onLike) },
-                onDownload = { current?.let(onEnqueueDownload) },
-                onAddToPlaylist = { current?.let(onMore) },
-                onSleepTimer = onSleepTimerClick,
-                onShare = {
-                    current?.let { t ->
-                        val send = Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(Intent.EXTRA_TEXT, "Lyreon · ${t.title} - ${t.artist}\n${t.watchUrl}")
-                        }
-                        navController.context.startActivity(Intent.createChooser(send, "Bagikan lagu"))
-                    }
-                },
-                onPlayAt = player::playAt,
-                onRemoveQueueItem = player::removeAt,
-                onMoveQueueItem = player::moveItem,
-            )
         }
 
         composable(
@@ -907,11 +928,13 @@ private fun LyreonNavHost(
             arguments = listOf(navArgument("id") { type = NavType.StringType }),
         ) { entry ->
             val id = entry.arguments?.getString("id").orEmpty()
-            EditorialDetailScreen(
-                sectionId = id,
-                onBack = { navController.popBackStack() },
-                onPlayMovement = playMovement,
-            )
+            page(this) {
+                EditorialDetailScreen(
+                    sectionId = id,
+                    onBack = { navController.popBackStack() },
+                    onPlayMovement = playMovement,
+                )
+            }
         }
     }
 }

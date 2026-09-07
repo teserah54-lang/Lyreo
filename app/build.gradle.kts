@@ -144,6 +144,12 @@ dependencies {
     implementation("io.coil-kt.coil3:coil-compose:3.3.0")
     implementation("io.coil-kt.coil3:coil-network-okhttp:3.3.0")
 
+    // --- Palet warna dari bitmap artwork (aksen tema pemutar) ---
+    // Cara yang sama dipakai Meld (fork Metrolist): `Palette.from(bitmap)` →
+    // swatch berbobot populasi → vividness dinaikkan. Lihat
+    // `ui/theme/PlayerColorExtractor.kt` untuk atribusi GPL-3.0.
+    implementation("androidx.palette:palette-ktx:1.0.0")
+
     // --- Fallback extractor: engine JS ringan untuk menjalankan fungsi decipher
     // (s & n) yang dipanen dari base.js YouTube — jalur InnerTube langsung ke Google,
     // dipakai ketika MetrolistExtractor gagal/stream kosong. API Rhino stabil sejak lama.

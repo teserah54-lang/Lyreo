@@ -10,13 +10,19 @@ import android.content.Context
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.os.Build
+import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.EnterExitState
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -50,6 +56,15 @@ import kotlin.math.abs
 //     `RenderEffect.createBlurEffect` (dibuat sekali per radius terkuantisasi
 //     dan di-cache) sehingga tidak ada kompilasi shader sama sekali.
 //
+// DUA lapis, dua sumber gerak:
+//  A. TRANSISI LAYAR — [pageMotionBlur]: blur menempel pada HALAMAN itu
+//     sendiri, radius-nya diturunkan langsung dari progres transisi
+//     halaman (NavHost), bukan animasi/`pulse` terpisah di kontainer.
+//     Halaman yang bergerak ikut blur; halaman diam tajam. Ini transisi
+//     motion blur sungguhan, bukan "kedipan blur" di seluruh layar.
+//  B. GULIR CEPAT — [scrollMotionBlur]: koneksi nested scroll menerjemahkan
+//     kecepatan gulir menjadi blur kecil pada kontainer daftar.
+//
 // Aturan biaya (lihat notes/03 §4):
 //  - maksimal SATU lapis blur per layar, tidak pernah di dalam item list;
 //  - saat diam, `renderEffect = null` → tidak ada lapisan offscreen sama sekali,
@@ -58,14 +73,14 @@ import kotlin.math.abs
 // ------------------------------------------------------------------
 
 /** Radius maksimum blur saat transisi layar (nilai tertinggi, sesaat). */
-val MotionBlurTransitionRadius: Dp = 14.dp
+val MotionBlurTransitionRadius: Dp = 16.dp
 
 /**
  * Radius efektif maksimum saat gulir cepat. Lapisan blur dipakai bersama dengan
  * transisi layar ([MotionBlurTransitionRadius]); gulir dibatasi lewat target
- * maksimum 0.28 di [ScrollBlurConnection] sehingga hasilnya ≈ 4dp.
+ * maksimum 0.28 di [ScrollBlurConnection] sehingga hasilnya ≈ 4–5dp.
  */
-val MotionBlurScrollRadius: Dp = 4.dp
+val MotionBlurScrollRadius: Dp = 16.dp
 
 /**
  * Kecepatan gulir (px/ms) saat blur mulai muncul. Di bawah ini layar dianggap
@@ -89,11 +104,92 @@ private fun blurEffectFor(radiusPx: Float): androidx.compose.ui.graphics.RenderE
     }
 }
 
+/** Cache blur TERARAH (radius X ≠ Y): kunci gabungan (rx shl 16) or ry. */
+private val directionalEffectCache = HashMap<Long, androidx.compose.ui.graphics.RenderEffect>()
+
+/**
+ * Blur gerak horizontal ala iOS: dominan di sumbu X (arah geser halaman),
+ * tipis di sumbu Y. Inilah yang membuat transisi terlihat "meluncur", bukan
+ * sekadar memudar.
+ */
+private fun directionalBlurEffectFor(
+    radiusXPx: Float,
+    radiusYPx: Float,
+): androidx.compose.ui.graphics.RenderEffect? {
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return null
+    val rx = radiusXPx.toInt().coerceIn(1, 64)
+    val ry = radiusYPx.toInt().coerceIn(1, 64)
+    val key = (rx.toLong() shl 16) or ry.toLong()
+    return directionalEffectCache.getOrPut(key) {
+        RenderEffect
+            .createBlurEffect(rx.toFloat(), ry.toFloat(), Shader.TileMode.CLAMP)
+            .asComposeRenderEffect()
+    }
+}
+
 /** Perangkat ini sanggup menanggung blur lapisan penuh tanpa menjatuhkan frame? */
 fun deviceSupportsMotionBlur(context: Context): Boolean {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return false
     val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return true
     return runCatching { !am.isLowRamDevice }.getOrDefault(true)
+}
+
+/**
+ * MOTION BLUR TRANSISI LAYAR (pola A di atas).
+ *
+ * Dipasang pada ROOT tiap halaman NavHost bersama scope animasi halaman itu
+ * (`this@composable`). Progres transisi (PreEnter/Visible/PostExit) dianimasikan
+ * dengan spring yang sama seperti geseran halaman, lalu radius blur diturunkan
+ * dari jarak menuju posisi diam:
+ *
+ *    amount = 1 − progres   →  baru masuk/keluar = blur penuh,
+ *                              halaman mantap = tajam sempurna (tanpa layer).
+ *
+ * @param scope scope AnimatedVisibility milik entry NavHost halaman ini.
+ * @param enabled gabungan setelan pengguna + reduce motion (guard perangkat
+ *   dicek otomatis di dalam sini).
+ */
+@Composable
+fun Modifier.pageMotionBlur(
+    scope: AnimatedVisibilityScope,
+    maxRadius: Dp = MotionBlurTransitionRadius,
+    enabled: Boolean = true,
+): Modifier {
+    val context = LocalContext.current
+    val supported = remember(context, enabled) {
+        enabled && deviceSupportsMotionBlur(context)
+    } && !reduceMotionEnabled
+    if (!supported) return this
+
+    // Progres 0→1 saat halaman masuk (PreEnter→Visible), 1→0 saat keluar
+    // (Visible→PostExit). Spring sengaja sama dengan spec geser layar di
+    // Motion.kt supaya kurva blur mengikuti kurva geser.
+    val progress by scope.transition.animateFloat(
+        transitionSpec = {
+            spring(
+                dampingRatio = LyreonMotion.dampingCalm,
+                stiffness = LyreonMotion.stiffnessBrisk,
+            )
+        },
+        label = "pageMotionBlurProgress",
+    ) { state ->
+        when (state) {
+            EnterExitState.PreEnter -> 0f
+            EnterExitState.Visible -> 1f
+            EnterExitState.PostExit -> 0f
+        }
+    }
+
+    return graphicsLayer {
+        val amount = (1f - progress).coerceIn(0f, 1f)
+        renderEffect = if (amount > 0.04f) {
+            val px = amount * maxRadius.toPx()
+            // Dominan horizontal: halaman bergerak menyamping di NavHost.
+            directionalBlurEffectFor(px, px * 0.34f)
+        } else {
+            null
+        }
+    }
 }
 
 /**
@@ -182,10 +278,12 @@ fun rememberMotionBlurState(): MotionBlurState {
 /**
  * Pasang lapisan blur pada satu kontainer. `maxRadius` adalah radius saat
  * `amount` = 1; saat `amount` ≈ 0 tidak ada `RenderEffect` sama sekali.
+ *
+ * Untuk gulir cepat: pasang dengan [MotionBlurScrollRadius] (pola B).
  */
 fun Modifier.motionBlurLayer(
     state: MotionBlurState,
-    maxRadius: Dp = MotionBlurTransitionRadius,
+    maxRadius: Dp = MotionBlurScrollRadius,
     enabled: Boolean = true,
 ): Modifier = graphicsLayer {
     val amount = if (enabled) state.amount else 0f
@@ -209,7 +307,7 @@ private class ScrollBlurConnection(
     /**
      * Target maksimum yang boleh diminta gulir. Satu lapis blur dipakai bersama
      * oleh transisi layar dan gulir; transisi boleh penuh (1.0), gulir dibatasi
-     * karena area yang diblur jauh lebih lama terlihat (4dp dari 14dp ≈ 0.28).
+     * karena area yang diblur jauh lebih lama terlihat.
      */
     private val maxTarget: Float = 0.28f,
 ) : NestedScrollConnection {

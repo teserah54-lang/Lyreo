@@ -72,6 +72,7 @@ private val APP_LIBRARIES = listOf(
     LicenseEntry("AndroidX Media3 (ExoPlayer, Session, UI, HLS, DataSource)", "Apache-2.0", "https://github.com/androidx/media"),
     LicenseEntry("AndroidX Room", "Apache-2.0", "https://developer.android.com/jetpack/androidx/releases/room"),
     LicenseEntry("AndroidX DataStore (Preferences)", "Apache-2.0", "https://developer.android.com/topic/libraries/architecture/datastore"),
+    LicenseEntry("AndroidX Palette (ekstraksi warna artwork)", "Apache-2.0", "https://developer.android.com/develop/ui/views/graphics/palette-colors"),
     LicenseEntry("AndroidX Lifecycle / ViewModel", "Apache-2.0", "https://developer.android.com/jetpack/androidx/releases/lifecycle"),
     LicenseEntry("AndroidX Navigation Compose", "Apache-2.0", "https://developer.android.com/jetpack/androidx/releases/navigation"),
     LicenseEntry("Kotlin Standard Library & Coroutines", "Apache-2.0", "https://kotlinlang.org"),

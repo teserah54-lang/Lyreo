@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +29,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -56,9 +58,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -143,7 +149,6 @@ fun NowPlayingScreen(
     onMoveQueueItem: (Int, Int) -> Unit,
     onSetVideoMode: (Boolean) -> Unit,
     onSeekMs: (Long) -> Unit,
-    artworkSharedModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val track = playerState.currentTrack
@@ -221,302 +226,317 @@ fun NowPlayingScreen(
             return@BoxWithConstraints
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = if (wide) 48.dp else 24.dp)
-                .widthIn(max = 560.dp)
-                .align(Alignment.Center),
-        ) {
-            // Top bar
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.action_close), tint = LyreonTextPrimary)
-                }
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Text(stringResource(R.string.np_kicker), style = MaterialTheme.typography.labelMedium, color = LyreonTextSecondary)
+        // LIRIK HALAMAN PENUH vs tampilan pemutar — pola Meld (`Player.kt`,
+        // `showInlineLyrics`): lirik mengganti SELURUH area konten utama player,
+        // bukan lagi lirik yang digulir di dalam kotak artwork.
+        Crossfade(
+            targetState = showLyrics,
+            animationSpec = lyreonTween(LyreonMotion.deliberate),
+            label = "np_main",
+            modifier = Modifier.align(Alignment.Center),
+        ) { lyricsMode ->
+            if (lyricsMode) {
+                LyricsFullPage(
+                    track = track,
+                    positionMs = pos.positionMs,
+                    accent = dynamicPalette.accent,
+                    onClose = { showLyrics = false },
+                    onSeekMs = onSeekMs,
+                )
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = if (wide) 48.dp else 24.dp)
+                        .widthIn(max = 560.dp),
+                ) {
+                    // Top bar
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.Filled.KeyboardArrowDown, contentDescription = stringResource(R.string.action_close), tint = LyreonTextPrimary)
+                        }
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(stringResource(R.string.np_kicker), style = MaterialTheme.typography.labelMedium, color = LyreonTextSecondary)
+                            Text(
+                                when {
+                                    playerState.isBuffering -> stringResource(R.string.np_loading_stream)
+                                    track.isLocal -> stringResource(R.string.np_local_file)
+                                    videoMode -> stringResource(R.string.np_video)
+                                    else -> stringResource(R.string.np_audio_only)
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                color = LyreonTextMuted,
+                            )
+                        }
+                        if (track.isLocal) {
+                            Spacer(Modifier.size(48.dp))
+                        } else {
+                            IconButton(onClick = onShare) {
+                                Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.np_share), tint = LyreonTextPrimary)
+                            }
+                        }
+                    }
+
+                    // Segmented MUSIK | VIDEO ala iOS
+                    if (!track.isLocal) {
+                        Spacer(Modifier.height(12.dp))
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.CenterHorizontally)
+                                .clip(RoundedCornerShape(50))
+                                .background(LyreonSurface.copy(alpha = 0.6f))
+                                .border(1.dp, LyreonLine.copy(alpha = 0.3f), RoundedCornerShape(50))
+                                .padding(4.dp),
+                        ) {
+                            ModePill(
+                                label = stringResource(R.string.np_music),
+                                selected = !videoMode,
+                                accentColor = dynamicPalette.accent,
+                                onClick = { onSetVideoMode(false) },
+                            )
+                            Spacer(Modifier.width(4.dp))
+                            ModePill(
+                                label = stringResource(R.string.np_video),
+                                selected = videoMode,
+                                accentColor = dynamicPalette.accent,
+                                onClick = { onSetVideoMode(true) },
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(if (wide) 24.dp else 14.dp))
+
+                    // Kanvas utama: artwork (mode musik) atau PlayerView (mode video)
+                    if (videoMode && controller != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(16f / 9f)
+                                .clip(RoundedCornerShape(24.dp))
+                                .background(LyreonSurface),
+                        ) {
+                            AndroidView(
+                                factory = { ctx ->
+                                    PlayerView(ctx).apply {
+                                        useController = true
+                                        keepScreenOn = true
+                                        setShutterBackgroundColor(android.graphics.Color.BLACK)
+                                    }
+                                },
+                                update = { view -> view.player = controller },
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    } else {
+                        ArtworkCanvas(
+                            track = track,
+                            isDownloaded = isDownloaded,
+                            onOpenLyrics = { showLyrics = true },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+
+                    Spacer(Modifier.height(22.dp))
+
+                    // Meta: judul + artis di kiri, hati di kanan
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                track.title,
+                                style = MaterialTheme.typography.headlineMedium,
+                                color = LyreonTextPrimary,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            val artistName = track.artist.ifBlank { stringResource(R.string.common_youtube_music) }
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                ArtistAvatar(name = artistName, url = artistAvatarUrl)
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    artistName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = LyreonTextSecondary,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                            }
+                        }
+                        IconButton(onClick = onLike) {
+                            Icon(
+                                if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
+                                contentDescription = stringResource(if (isLiked) R.string.np_like_remove else R.string.np_like_add),
+                                tint = if (isLiked) dynamicPalette.accent else LyreonTextSecondary,
+                                modifier = Modifier.size(28.dp),
+                            )
+                        }
+                    }
                     Text(
-                        when {
-                            playerState.isBuffering -> stringResource(R.string.np_loading_stream)
-                            track.isLocal -> stringResource(R.string.np_local_file)
-                            videoMode -> stringResource(R.string.np_video)
-                            else -> stringResource(R.string.np_audio_only)
-                        },
+                        stringResource(R.string.np_audio_queue, playerState.currentIndex + 1, playerState.queue.size),
                         style = MaterialTheme.typography.labelSmall,
                         color = LyreonTextMuted,
                     )
-                }
-                if (track.isLocal) {
-                    Spacer(Modifier.size(48.dp))
-                } else {
-                    IconButton(onClick = onShare) {
-                        Icon(Icons.Filled.Share, contentDescription = stringResource(R.string.np_share), tint = LyreonTextPrimary)
-                    }
-                }
-            }
 
-            // Segmented MUSIK | VIDEO ala iOS
-            if (!track.isLocal) {
-                Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier
-                        .align(Alignment.CenterHorizontally)
-                        .clip(RoundedCornerShape(50))
-                        .background(LyreonSurface.copy(alpha = 0.6f))
-                        .border(1.dp, LyreonLine.copy(alpha = 0.3f), RoundedCornerShape(50))
-                        .padding(4.dp),
-                ) {
-                    ModePill(
-                        label = stringResource(R.string.np_music),
-                        selected = !videoMode,
-                        accentColor = dynamicPalette.accent,
-                        onClick = { onSetVideoMode(false) },
-                    )
-                    Spacer(Modifier.width(4.dp))
-                    ModePill(
-                        label = stringResource(R.string.np_video),
-                        selected = videoMode,
-                        accentColor = dynamicPalette.accent,
-                        onClick = { onSetVideoMode(true) },
-                    )
-                }
-            }
+                    Spacer(Modifier.height(18.dp))
 
-            Spacer(Modifier.height(if (wide) 24.dp else 14.dp))
-
-            // Kanvas utama: artwork (mode musik) atau PlayerView (mode video)
-            if (videoMode && controller != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .clip(RoundedCornerShape(24.dp))
-                        .background(LyreonSurface),
-                ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            PlayerView(ctx).apply {
-                                useController = true
-                                keepScreenOn = true
-                                setShutterBackgroundColor(android.graphics.Color.BLACK)
-                            }
+                    // Seek
+                    Slider(
+                        value = if (dragging) sliderValue else progress.coerceIn(0f, 1f),
+                        onValueChange = {
+                            dragging = true
+                            sliderValue = it
                         },
-                        update = { view -> view.player = controller },
-                        modifier = Modifier.fillMaxSize(),
+                        onValueChangeFinished = {
+                            onSeekFraction(sliderValue)
+                            dragging = false
+                        },
+                        colors = SliderDefaults.colors(
+                            thumbColor = LyreonTextPrimary,
+                            activeTrackColor = dynamicPalette.accent,
+                            inactiveTrackColor = LyreonSurface.copy(alpha = 0.5f),
+                        ),
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                }
-            } else {
-                ArtworkOrLyrics(
-                    track = track,
-                    isDownloaded = isDownloaded,
-                    showLyrics = showLyrics,
-                    positionMs = pos.positionMs,
-                    onToggleLyrics = { showLyrics = !showLyrics },
-                    onSeekMs = onSeekMs,
-                    sharedModifier = artworkSharedModifier,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-            }
-
-            Spacer(Modifier.height(22.dp))
-
-            // Meta: judul + artis di kiri, hati di kanan
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        track.title,
-                        style = MaterialTheme.typography.headlineMedium,
-                        color = LyreonTextPrimary,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    val artistName = track.artist.ifBlank { stringResource(R.string.common_youtube_music) }
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        ArtistAvatar(name = artistName, url = artistAvatarUrl)
-                        Spacer(Modifier.width(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
                         Text(
-                            artistName,
-                            style = MaterialTheme.typography.bodyMedium,
+                            formatMs(if (dragging) (sliderValue * pos.durationMs).toLong() else pos.positionMs),
+                            style = MaterialTheme.typography.labelSmall,
                             color = LyreonTextSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(formatMs(pos.durationMs), style = MaterialTheme.typography.labelSmall, color = LyreonTextSecondary)
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    // Kontrol utama
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                    ) {
+                        IconButton(onClick = { onShuffle(!playerState.shuffleEnabled) }) {
+                            Icon(
+                                Icons.Filled.Shuffle,
+                                contentDescription = stringResource(R.string.common_shuffle),
+                                tint = if (playerState.shuffleEnabled) dynamicPalette.accent else LyreonTextSecondary,
+                            )
+                        }
+                        IconButton(onClick = onPrev, modifier = Modifier.size(52.dp)) {
+                            Icon(
+                                Icons.Filled.SkipPrevious,
+                                contentDescription = stringResource(R.string.np_previous),
+                                tint = LyreonTextPrimary,
+                                modifier = Modifier.size(38.dp),
+                            )
+                        }
+                        LyreonPlayButton(
+                            isPlaying = playerState.isPlaying,
+                            onClick = onToggle,
+                            size = 84.dp,
+                        )
+                        IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) {
+                            Icon(
+                                Icons.Filled.SkipNext,
+                                contentDescription = stringResource(R.string.np_next),
+                                tint = LyreonTextPrimary,
+                                modifier = Modifier.size(38.dp),
+                            )
+                        }
+                        IconButton(onClick = onCycleRepeat) {
+                            Icon(
+                                when (playerState.repeatMode) {
+                                    Player.REPEAT_MODE_ONE -> Icons.Filled.RepeatOne
+                                    else -> Icons.Filled.Repeat
+                                },
+                                contentDescription = stringResource(R.string.np_repeat),
+                                tint = if (playerState.repeatMode != Player.REPEAT_MODE_OFF) dynamicPalette.accent else LyreonTextSecondary,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(22.dp))
+
+                    // Aksi sekunder: lirik · unduh · playlist · timer · antrean
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        SecondaryAction(
+                            icon = Icons.Filled.Lyrics,
+                            label = stringResource(R.string.np_lyrics),
+                            active = showLyrics,
+                            accentColor = dynamicPalette.accent,
+                            onClick = { showLyrics = !showLyrics },
+                        )
+                        if (!track.isLocal) {
+                            SecondaryAction(
+                                icon = Icons.Filled.Download,
+                                label = stringResource(R.string.np_download),
+                                active = isDownloaded,
+                                accentColor = dynamicPalette.accent,
+                                onClick = onDownload,
+                            )
+                        }
+                        SecondaryAction(
+                            icon = Icons.Filled.PlaylistAdd,
+                            label = stringResource(R.string.common_playlist_caps),
+                            active = false,
+                            accentColor = dynamicPalette.accent,
+                            onClick = onAddToPlaylist,
+                        )
+                        SecondaryAction(
+                            icon = Icons.Filled.Bedtime,
+                            label = if (playerState.sleepDeadlineMs != null) {
+                                val mins = ((playerState.sleepDeadlineMs - System.currentTimeMillis()) / 60000L).coerceAtLeast(0)
+                                stringResource(R.string.np_timer_left, mins)
+                            } else stringResource(R.string.np_timer),
+                            active = playerState.sleepDeadlineMs != null,
+                            accentColor = dynamicPalette.accent,
+                            onClick = onSleepTimer,
+                        )
+                        SecondaryAction(
+                            icon = Icons.Filled.QueueMusic,
+                            label = stringResource(R.string.np_queue),
+                            active = false,
+                            accentColor = dynamicPalette.accent,
+                            onClick = { showQueue = true },
+                        )
+                        val audioPrefs = rememberPlaybackPrefs()
+                        val audioTweaked = audioPrefs.playbackSpeed != 1f || audioPrefs.pitchSemitones != 0
+                        SecondaryAction(
+                            icon = Icons.Filled.Speed,
+                            label = if (audioTweaked) {
+                                stringResource(R.string.np_speed_active_fmt, audioPrefs.playbackSpeed)
+                            } else {
+                                stringResource(R.string.np_speed)
+                            },
+                            active = audioTweaked,
+                            accentColor = dynamicPalette.accent,
+                            onClick = { showPlaybackParams = true },
                         )
                     }
-                }
-                IconButton(onClick = onLike) {
-                    Icon(
-                        if (isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = stringResource(if (isLiked) R.string.np_like_remove else R.string.np_like_add),
-                        tint = if (isLiked) dynamicPalette.accent else LyreonTextSecondary,
-                        modifier = Modifier.size(28.dp),
-                    )
+
+                    if (showPlaybackParams) {
+                        PlaybackParamsDialog(onDismiss = { showPlaybackParams = false })
+                    }
+
+                    Spacer(Modifier.height(32.dp))
                 }
             }
-            Text(
-                stringResource(R.string.np_audio_queue, playerState.currentIndex + 1, playerState.queue.size),
-                style = MaterialTheme.typography.labelSmall,
-                color = LyreonTextMuted,
-            )
-
-            Spacer(Modifier.height(18.dp))
-
-            // Seek
-            Slider(
-                value = if (dragging) sliderValue else progress.coerceIn(0f, 1f),
-                onValueChange = {
-                    dragging = true
-                    sliderValue = it
-                },
-                onValueChangeFinished = {
-                    onSeekFraction(sliderValue)
-                    dragging = false
-                },
-                colors = SliderDefaults.colors(
-                    thumbColor = LyreonTextPrimary,
-                    activeTrackColor = dynamicPalette.accent,
-                    inactiveTrackColor = LyreonSurface.copy(alpha = 0.5f),
-                ),
-                modifier = Modifier.fillMaxWidth(),
-            )
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-            ) {
-                Text(
-                    formatMs(if (dragging) (sliderValue * pos.durationMs).toLong() else pos.positionMs),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = LyreonTextSecondary,
-                )
-                Text(formatMs(pos.durationMs), style = MaterialTheme.typography.labelSmall, color = LyreonTextSecondary)
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // Kontrol utama
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly,
-            ) {
-                IconButton(onClick = { onShuffle(!playerState.shuffleEnabled) }) {
-                    Icon(
-                        Icons.Filled.Shuffle,
-                        contentDescription = stringResource(R.string.common_shuffle),
-                        tint = if (playerState.shuffleEnabled) dynamicPalette.accent else LyreonTextSecondary,
-                    )
-                }
-                IconButton(onClick = onPrev, modifier = Modifier.size(52.dp)) {
-                    Icon(
-                        Icons.Filled.SkipPrevious,
-                        contentDescription = stringResource(R.string.np_previous),
-                        tint = LyreonTextPrimary,
-                        modifier = Modifier.size(38.dp),
-                    )
-                }
-                LyreonPlayButton(
-                    isPlaying = playerState.isPlaying,
-                    onClick = onToggle,
-                    size = 84.dp,
-                )
-                IconButton(onClick = onNext, modifier = Modifier.size(52.dp)) {
-                    Icon(
-                        Icons.Filled.SkipNext,
-                        contentDescription = stringResource(R.string.np_next),
-                        tint = LyreonTextPrimary,
-                        modifier = Modifier.size(38.dp),
-                    )
-                }
-                IconButton(onClick = onCycleRepeat) {
-                    Icon(
-                        when (playerState.repeatMode) {
-                            Player.REPEAT_MODE_ONE -> Icons.Filled.RepeatOne
-                            else -> Icons.Filled.Repeat
-                        },
-                        contentDescription = stringResource(R.string.np_repeat),
-                        tint = if (playerState.repeatMode != Player.REPEAT_MODE_OFF) dynamicPalette.accent else LyreonTextSecondary,
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(22.dp))
-
-            // Aksi sekunder: lirik · unduh · playlist · timer · antrean
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceEvenly,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                SecondaryAction(
-                    icon = Icons.Filled.Lyrics,
-                    label = stringResource(R.string.np_lyrics),
-                    active = showLyrics,
-                    accentColor = dynamicPalette.accent,
-                    onClick = { showLyrics = !showLyrics },
-                )
-                if (!track.isLocal) {
-                    SecondaryAction(
-                        icon = Icons.Filled.Download,
-                        label = stringResource(R.string.np_download),
-                        active = isDownloaded,
-                        accentColor = dynamicPalette.accent,
-                        onClick = onDownload,
-                    )
-                }
-                SecondaryAction(
-                    icon = Icons.Filled.PlaylistAdd,
-                    label = stringResource(R.string.common_playlist_caps),
-                    active = false,
-                    accentColor = dynamicPalette.accent,
-                    onClick = onAddToPlaylist,
-                )
-                SecondaryAction(
-                    icon = Icons.Filled.Bedtime,
-                    label = if (playerState.sleepDeadlineMs != null) {
-                        val mins = ((playerState.sleepDeadlineMs - System.currentTimeMillis()) / 60000L).coerceAtLeast(0)
-                        stringResource(R.string.np_timer_left, mins)
-                    } else stringResource(R.string.np_timer),
-                    active = playerState.sleepDeadlineMs != null,
-                    accentColor = dynamicPalette.accent,
-                    onClick = onSleepTimer,
-                )
-                SecondaryAction(
-                    icon = Icons.Filled.QueueMusic,
-                    label = stringResource(R.string.np_queue),
-                    active = false,
-                    accentColor = dynamicPalette.accent,
-                    onClick = { showQueue = true },
-                )
-                val audioPrefs = rememberPlaybackPrefs()
-                val audioTweaked = audioPrefs.playbackSpeed != 1f || audioPrefs.pitchSemitones != 0
-                SecondaryAction(
-                    icon = Icons.Filled.Speed,
-                    label = if (audioTweaked) {
-                        stringResource(R.string.np_speed_active_fmt, audioPrefs.playbackSpeed)
-                    } else {
-                        stringResource(R.string.np_speed)
-                    },
-                    active = audioTweaked,
-                    accentColor = dynamicPalette.accent,
-                    onClick = { showPlaybackParams = true },
-                )
-            }
-
-            if (showPlaybackParams) {
-                PlaybackParamsDialog(onDismiss = { showPlaybackParams = false })
-            }
-
-            Spacer(Modifier.height(32.dp))
         }
     }
 
@@ -544,7 +564,9 @@ fun NowPlayingScreen(
                 )
             },
         ) {
-            Column(Modifier.padding(bottom = 24.dp)) {
+            // Lembar antrean memenuhi sebagian besar layar (pola Meld: antrean
+            // adalah lembar tinggi dengan daftar panjang, bukan kotak 420dp).
+            Column(Modifier.fillMaxHeight(0.88f).padding(bottom = 24.dp)) {
                 // Header Segmented Tab: Antrean vs Riwayat
                 Row(
                     modifier = Modifier
@@ -588,21 +610,36 @@ fun NowPlayingScreen(
                     }
 
                     if (queueTab == 0 && playerState.queue.size > 1) {
-                        Text(
-                            stringResource(R.string.history_clear),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = dynamicPalette.accent,
-                            modifier = Modifier
-                                .clip(RoundedCornerShape(50))
-                                .clickable {
-                                    // Bersihkan antrean selain lagu yang sedang diputar
-                                    val currentIdx = playerState.currentIndex
-                                    for (i in playerState.queue.indices.reversed()) {
-                                        if (i != currentIdx) onRemoveQueueItem(i)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            // Acak antrean (pola Meld: aksi acak tersedia langsung
+                            // di lembar antrean, bukan hanya di kontrol pemutar).
+                            IconButton(
+                                onClick = { onShuffle(!playerState.shuffleEnabled) },
+                                modifier = Modifier.size(32.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.Shuffle,
+                                    contentDescription = stringResource(R.string.common_shuffle),
+                                    tint = if (playerState.shuffleEnabled) dynamicPalette.accent else LyreonTextSecondary,
+                                    modifier = Modifier.size(18.dp),
+                                )
+                            }
+                            Text(
+                                stringResource(R.string.history_clear),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = dynamicPalette.accent,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(50))
+                                    .clickable {
+                                        // Bersihkan antrean selain lagu yang sedang diputar
+                                        val currentIdx = playerState.currentIndex
+                                        for (i in playerState.queue.indices.reversed()) {
+                                            if (i != currentIdx) onRemoveQueueItem(i)
+                                        }
                                     }
-                                }
-                                .padding(horizontal = 10.dp, vertical = 6.dp),
-                        )
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                            )
+                        }
                     }
                 }
 
@@ -645,87 +682,125 @@ fun NowPlayingScreen(
                         }
                     }
 
+                    // Gulir otomatis ke lagu yang sedang diputar setiap kali
+                    // lembar dibuka / lagu berganti (pola Meld Queue.kt).
+                    val queueListState = rememberLazyListState()
+                    LaunchedEffect(showQueue, playerState.currentIndex, queueTab) {
+                        val idx = playerState.currentIndex
+                        if (idx in playerState.queue.indices) {
+                            runCatching { queueListState.animateScrollToItem(idx) }
+                        }
+                    }
+
                     LazyColumn(
+                        state = queueListState,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(420.dp),
+                            .weight(1f),
                         contentPadding = PaddingValues(bottom = 16.dp),
                     ) {
                         itemsIndexed(playerState.queue, key = { i, t -> "${t.videoId}_$i" }) { index, item ->
                             val active = index == playerState.currentIndex
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(if (active) LyreonSurface.copy(alpha = 0.5f) else LyreonElevated)
-                                    .clickable { onPlayAt(index) }
-                                    .padding(horizontal = 20.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Text(
-                                    "%02d".format(index + 1),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = if (active) dynamicPalette.accent else LyreonTextMuted,
-                                    modifier = Modifier.width(28.dp),
-                                )
-                                Artwork(url = item.thumbnailUrl, title = item.title, size = 40.dp)
-                                Spacer(Modifier.width(10.dp))
-                                Column(Modifier.weight(1f)) {
-                                    Text(
-                                        item.title,
-                                        style = MaterialTheme.typography.titleSmall,
-                                        color = LyreonTextPrimary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                    Text(
-                                        item.artist.ifBlank { stringResource(R.string.common_youtube) },
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = LyreonTextSecondary,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                    )
-                                }
-                                IconButton(
-                                    onClick = { if (index > 0) onMoveQueueItem(index, index - 1) },
-                                    enabled = index > 0,
-                                    modifier = Modifier.size(32.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Filled.KeyboardArrowUp,
-                                        contentDescription = stringResource(R.string.move_up),
-                                        tint = if (index > 0) LyreonTextSecondary else LyreonSurface,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                                IconButton(
-                                    onClick = {
-                                        if (index < playerState.queue.lastIndex) onMoveQueueItem(index, index + 1)
-                                    },
-                                    enabled = index < playerState.queue.lastIndex,
-                                    modifier = Modifier.size(32.dp),
-                                ) {
-                                    Icon(
-                                        Icons.Filled.KeyboardArrowDown,
-                                        contentDescription = stringResource(R.string.move_down),
-                                        tint = if (index < playerState.queue.lastIndex) LyreonTextSecondary else LyreonSurface,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                }
-                                if (active) {
-                                    Icon(
-                                        Icons.Filled.GraphicEq,
-                                        contentDescription = stringResource(R.string.common_playing),
-                                        tint = dynamicPalette.accent,
-                                        modifier = Modifier.size(18.dp),
-                                    )
-                                } else {
-                                    IconButton(onClick = { onRemoveQueueItem(index) }, modifier = Modifier.size(32.dp)) {
+                            // Geser ke kiri = hapus dari antrean (pola Meld:
+                            // SwipeToDismissBox di baris antrean).
+                            val dismissState = rememberSwipeToDismissBoxState(
+                                confirmValueChange = { value ->
+                                    if (value == SwipeToDismissBoxValue.EndToStart) {
+                                        onRemoveQueueItem(index)
+                                        true
+                                    } else {
+                                        false
+                                    }
+                                },
+                            )
+                            SwipeToDismissBox(
+                                state = dismissState,
+                                enableDismissFromStartToEnd = false,
+                                backgroundContent = {
+                                    Box(
+                                        Modifier
+                                            .fillMaxSize()
+                                            .padding(vertical = 2.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(LyreonRose.copy(alpha = 0.85f)),
+                                        contentAlignment = Alignment.CenterEnd,
+                                    ) {
                                         Icon(
                                             Icons.Filled.Close,
                                             contentDescription = stringResource(R.string.queue_remove),
-                                            tint = LyreonTextMuted,
-                                            modifier = Modifier.size(16.dp),
+                                            tint = LyreonBackground,
+                                            modifier = Modifier.padding(end = 24.dp),
                                         )
+                                    }
+                                },
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .background(if (active) LyreonSurface.copy(alpha = 0.5f) else LyreonElevated)
+                                        .clickable { onPlayAt(index) }
+                                        .padding(horizontal = 20.dp, vertical = 10.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        "%02d".format(index + 1),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (active) dynamicPalette.accent else LyreonTextMuted,
+                                        modifier = Modifier.width(28.dp),
+                                    )
+                                    Artwork(url = item.thumbnailUrl, title = item.title, size = 40.dp)
+                                    Spacer(Modifier.width(10.dp))
+                                    Column(Modifier.weight(1f)) {
+                                        Text(
+                                            item.title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = LyreonTextPrimary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                        Text(
+                                            item.artist.ifBlank { stringResource(R.string.common_youtube) },
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = LyreonTextSecondary,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = { if (index > 0) onMoveQueueItem(index, index - 1) },
+                                        enabled = index > 0,
+                                        modifier = Modifier.size(32.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.KeyboardArrowUp,
+                                            contentDescription = stringResource(R.string.move_up),
+                                            tint = if (index > 0) LyreonTextSecondary else LyreonSurface,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    IconButton(
+                                        onClick = {
+                                            if (index < playerState.queue.lastIndex) onMoveQueueItem(index, index + 1)
+                                        },
+                                        enabled = index < playerState.queue.lastIndex,
+                                        modifier = Modifier.size(32.dp),
+                                    ) {
+                                        Icon(
+                                            Icons.Filled.KeyboardArrowDown,
+                                            contentDescription = stringResource(R.string.move_down),
+                                            tint = if (index < playerState.queue.lastIndex) LyreonTextSecondary else LyreonSurface,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                    if (active) {
+                                        Icon(
+                                            Icons.Filled.GraphicEq,
+                                            contentDescription = stringResource(R.string.common_playing),
+                                            tint = dynamicPalette.accent,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    } else {
+                                        Spacer(Modifier.size(18.dp))
                                     }
                                 }
                             }
@@ -769,7 +844,7 @@ fun NowPlayingScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(300.dp),
+                                .weight(1f),
                             contentAlignment = Alignment.Center,
                         ) {
                             Text(
@@ -782,7 +857,7 @@ fun NowPlayingScreen(
                         LazyColumn(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(420.dp),
+                                .weight(1f),
                             contentPadding = PaddingValues(bottom = 16.dp),
                         ) {
                             itemsIndexed(historyTracks, key = { i, hTrack -> "${hTrack.videoId}_$i" }) { index, hTrack ->
@@ -888,97 +963,155 @@ private fun SecondaryAction(
 }
 
 /**
- * Kanvas sampul ⇄ lirik (ketuk untuk berganti, fade 450ms):
- *  - Sampul: bingkai persegi sedikit memanjang ke bawah (~1:1,06), gambar
- *    MENGISI penuh areanya (crop tengah), kualitas terjaga lewat rantai
- *    varian ytimg: maxres → sd → hq.
- *  - Lirik: artwork yang sama menjadi latar, diblur (API 31+) + digelapkan
- *    bergradasi supaya teks lirik paling menonjol.
+ * Kanvas sampul: bingkai persegi sedikit memanjang ke bawah (~1:1,06), gambar
+ * MENGISI penuh areanya (crop tengah), kualitas terjaga lewat rantai varian
+ * ytimg: maxres → sd → hq. Ketuk = buka HALAMAN LIRIK penuh.
  */
 @Composable
-private fun ArtworkOrLyrics(
+private fun ArtworkCanvas(
     track: LyreonTrack,
     isDownloaded: Boolean,
-    showLyrics: Boolean,
-    positionMs: Long,
-    onToggleLyrics: () -> Unit,
-    onSeekMs: (Long) -> Unit,
-    sharedModifier: Modifier = Modifier,
+    onOpenLyrics: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             // Persegi nyaris 1:1, sedikit lebih tinggi (lebih elegan dari 16:9)
             .aspectRatio(0.94f)
-            // Shared bounds dengan artwork mini player (ukuran berubah → di kiri;
-            // clip yang ikut morph di kanan).
-            .then(sharedModifier)
             .clip(RoundedCornerShape(20.dp))
             .background(LyreonSurface)
-            .clickable(onClick = onToggleLyrics),
+            .clickable(onClick = onOpenLyrics),
     ) {
-        Crossfade(targetState = showLyrics, animationSpec = lyreonTween(LyreonMotion.deliberate), label = "art_lyrics") { lyrics ->
-            if (!lyrics) {
-                Box(Modifier.fillMaxSize()) {
-                    if (track.thumbnailUrl.isNotBlank()) {
-                        RichArtwork(
-                            url = track.thumbnailUrl,
-                            contentDescription = track.title,
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    } else {
-                        Box(Modifier.fillMaxSize().background(LyreonSurface))
-                    }
-                    if (isDownloaded) {
-                        Box(
-                            Modifier
-                                .align(Alignment.TopStart)
-                                .padding(10.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(LyreonRose)
-                                .padding(horizontal = 8.dp, vertical = 4.dp),
-                        ) {
-                            Text(stringResource(R.string.common_offline), style = MaterialTheme.typography.labelSmall, color = LyreonBackground)
-                        }
-                    }
-                }
+        Box(Modifier.fillMaxSize()) {
+            if (track.thumbnailUrl.isNotBlank()) {
+                RichArtwork(
+                    url = track.thumbnailUrl,
+                    contentDescription = track.title,
+                    modifier = Modifier.fillMaxSize(),
+                )
             } else {
-                Box(Modifier.fillMaxSize()) {
-                    // Latar lirik = artwork yang sama, diblur
-                    if (track.thumbnailUrl.isNotBlank()) {
-                        RichArtwork(
-                            url = track.thumbnailUrl,
-                            contentDescription = null,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .then(
-                                    if (android.os.Build.VERSION.SDK_INT >= 31) {
-                                        Modifier.blur(32.dp)
-                                    } else {
-                                        // Pra-API 31: tanpa RenderEffect — redupkan saja
-                                        Modifier.alpha(0.22f)
-                                    },
-                                ),
-                        )
-                    }
-                    // Skrim gradasi → teks lirik jauh lebih menonjol dari thumbnail
-                    Box(
-                        Modifier.fillMaxSize().background(
-                            Brush.verticalGradient(
-                                listOf(
-                                    Color.Black.copy(alpha = 0.55f),
-                                    Color.Black.copy(alpha = 0.72f),
-                                ),
-                            ),
-                        ),
-                    )
-                    LyricsContent(
-                        track = track,
-                        positionMs = positionMs,
-                        onSeekMs = onSeekMs,
-                        modifier = Modifier.fillMaxSize(),
+                Box(Modifier.fillMaxSize().background(LyreonSurface))
+            }
+            if (isDownloaded) {
+                Box(
+                    Modifier
+                        .align(Alignment.TopStart)
+                        .padding(10.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(LyreonRose)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                ) {
+                    Text(stringResource(R.string.common_offline), style = MaterialTheme.typography.labelSmall, color = LyreonBackground)
+                }
+            }
+        }
+    }
+}
+
+/**
+ * HALAMAN LIRIK PENUH — pengganti lirik-dalam-kotak (permintaan pemilik
+ * proyek 2026-09-07, pola tata letak Meld): lirik memenuhi seluruh layar
+ * Now Playing, dengan artwork yang sama sebagai latar (blur + skrim gelap
+ * bergradasi ala `LyricsBackgroundStyle` Meld), bilah atas untuk kembali ke
+ * pemutar, dan baris aksi bawah agar lirik bisa ditutup sekali ketuk.
+ */
+@Composable
+private fun LyricsFullPage(
+    track: LyreonTrack,
+    positionMs: Long,
+    accent: Color,
+    onClose: () -> Unit,
+    onSeekMs: (Long) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Box(modifier.fillMaxSize()) {
+        // Latar: artwork yang sama, diblur (API 31+) / diredupkan (pra-31)
+        if (track.thumbnailUrl.isNotBlank()) {
+            RichArtwork(
+                url = track.thumbnailUrl,
+                contentDescription = null,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .then(
+                        if (android.os.Build.VERSION.SDK_INT >= 31) {
+                            Modifier.blur(40.dp)
+                        } else {
+                            Modifier.alpha(0.18f)
+                        },
+                    ),
+            )
+        }
+        // Skrim gradasi → teks lirik paling menonjol
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.Black.copy(alpha = 0.62f),
+                        LyreonBackground.copy(alpha = 0.78f),
+                        Color.Black.copy(alpha = 0.8f),
+                    ),
+                ),
+            ),
+        )
+        Column(Modifier.fillMaxSize()) {
+            // Bilah atas: tutup lirik → kembali ke tampilan pemutar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp, start = 8.dp, end = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                IconButton(onClick = onClose) {
+                    Icon(
+                        Icons.Filled.KeyboardArrowDown,
+                        contentDescription = stringResource(R.string.common_close),
+                        tint = LyreonTextPrimary,
                     )
                 }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        stringResource(R.string.lyrics_title),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = accent,
+                    )
+                    Text(
+                        track.title,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = LyreonTextSecondary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Spacer(Modifier.size(48.dp))
+            }
+
+            // Lirik memenuhi seluruh sisa halaman — inilah inti perubahannya:
+            // penuh, tanpa bingkai/kotak.
+            LyricsContent(
+                track = track,
+                positionMs = positionMs,
+                onSeekMs = onSeekMs,
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(),
+            )
+
+            // Baris aksi bawah: sekali ketuk kembali ke pemutar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 18.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                SecondaryAction(
+                    icon = Icons.Filled.Lyrics,
+                    label = stringResource(R.string.np_lyrics),
+                    active = true,
+                    accentColor = accent,
+                    onClick = onClose,
+                )
             }
         }
     }

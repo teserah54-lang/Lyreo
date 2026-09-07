@@ -2,6 +2,24 @@
  * Copyright (C) 2026 rixz-dev
  *
  * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * Sistem ekstraksi warna pemutar diadaptasi dari FrancescoGrazioso/Meld
+ * (GPL-3.0): app/src/main/kotlin/com/metrolist/music/ui/theme/PlayerColorExtractor.kt
+ * dan app/src/main/kotlin/com/metrolist/music/ui/player/Player.kt (blok
+ * LaunchedEffect yang membangun Palette 100×100 lalu memanggil
+ * extractGradientColors). Metrolist Project (C) 2026 — lihat riwayat git
+ * upstream untuk kontributor.
+ *
+ * Yang dipertahankan dari Meld:
+ *  - bitmap 100×100 via ImageLoader (cache memori UI ikut terpakai);
+ *  - `Palette.from(...).maximumColorCount(8).resizeBitmapArea(100*100)`;
+ *  - bobot swatch = populasi × bonus kejenuhan × (saturasi+nilai)/2;
+ *  - vividness dinaikkan: saturasi ×faktor, nilai dijepit 0.4..0.85.
+ *
+ * Penyesuaian Lyreon: OkHttp/Coil3 singleton (bukan Hilt), hasil dipakai
+ * untuk aksen + gradien ambien Now Playing (alpha lembut di atas latar,
+ * bukan gradasi pekat penuh), dan cache per-URL supaya satu lagu = satu
+ * ekstraksi.
  */
 package com.lyreon.app.ui.theme
 
@@ -19,9 +37,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.palette.graphics.Palette
 import coil3.ImageLoader
+import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
 import coil3.request.SuccessResult
+import coil3.request.allowHardware
 import coil3.toBitmap
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -39,11 +60,151 @@ data class DynamicArtworkPalette(
     val ambientGradient: Brush,
 )
 
-private val colorCache = ConcurrentHashMap<String, Color>()
+/**
+ * Hasil ekstraksi satu artwork: aksen utama + warna kedua untuk kedalaman
+ * gradien (pola `extractGradientColors` Meld: [utama, gelap, hitam] —
+ * di Lyreon versi keduanya dipakai sebagai stop tengah gradien ambien).
+ */
+data class ExtractedArtworkColors(
+    val primary: Color,
+    val secondary: Color,
+)
+
+/** Cache hasil ekstraksi per URL — satu lagu = satu ekstraksi. */
+private val extractedCache = ConcurrentHashMap<String, ExtractedArtworkColors>()
 
 /**
- * Ekstraktor warna dinamis dari thumbnail musik aktif.
- * Mengambil warna dominan dengan saturasi & kontras optimal untuk tema pemutar.
+ * Ekstraktor warna dinamis dari thumbnail musik aktif — pola Meld.
+ */
+object PlayerColorExtractor {
+
+    /** Ukuran bitmap ekstraksi (sama dengan Meld: 100×100, area 10.000 px). */
+    private const val SAMPLE_SIZE = 100
+
+    /**
+     * Ambil warna dari artwork: Palette swatch berbobot, vividness dinaikkan.
+     * Mengembalikan null bila artwork gagal dimuat / tidak ada warna layak.
+     */
+    suspend fun extract(context: Context, thumbnailUrl: String): ExtractedArtworkColors? =
+        withContext(Dispatchers.IO) {
+            extractedCache[thumbnailUrl]?.let { return@withContext it }
+            val loader: ImageLoader = SingletonImageLoader.get(context)
+            val request = ImageRequest.Builder(context)
+                .data(thumbnailUrl)
+                .size(SAMPLE_SIZE, SAMPLE_SIZE)
+                // Palette butuh bitmap software (getPixels) — hardware tidak bisa.
+                .allowHardware(false)
+                .build()
+            val result = loader.execute(request)
+            if (result !is SuccessResult) return@withContext null
+            val bitmap = result.image.toBitmap()
+
+            val colors = withContext(Dispatchers.Default) {
+                extractFromBitmap(bitmap, LyreonCrimson)
+            } ?: return@withContext null
+            extractedCache[thumbnailUrl] = colors
+            colors
+        }
+
+    /** Buang cache (dipanggil saat pengguna membersihkan cache aplikasi). */
+    fun clearCache() = extractedCache.clear()
+
+    /**
+     * Inti algoritma Meld: semua swatch diberi bobot (dominansi + kejenuhan),
+     * terbaik dipertajam; keduanya dikembalikan untuk gradien dua warna.
+     */
+    fun extractFromBitmap(
+        bitmap: Bitmap,
+        fallbackColor: Color,
+    ): ExtractedArtworkColors? {
+        val palette = Palette.from(bitmap)
+            .maximumColorCount(8)
+            .resizeBitmapArea(SAMPLE_SIZE * SAMPLE_SIZE)
+            .generate()
+
+        val candidates = listOfNotNull(
+            palette.dominantSwatch,
+            palette.vibrantSwatch,
+            palette.darkVibrantSwatch,
+            palette.lightVibrantSwatch,
+            palette.mutedSwatch,
+            palette.darkMutedSwatch,
+            palette.lightMutedSwatch,
+        )
+        val fallbackDominant = palette.dominantSwatch?.rgb
+            ?: palette.getDominantColor(fallbackColor.toArgb())
+
+        val ranked = candidates
+            .sortedByDescending { swatchWeight(it) }
+
+        val best = ranked.getOrNull(0)
+        val primary = if (best != null && isColorVibrant(Color(best.rgb))) {
+            enhanceColorVividness(Color(best.rgb), VIBRANT_SATURATION_FACTOR)
+        } else {
+            enhanceColorVividness(Color(fallbackDominant), FALLBACK_SATURATION_FACTOR)
+        }
+
+        val secondSwatch = ranked.getOrNull(1)
+        val secondary = if (secondSwatch != null) {
+            // Versi lebih gelap dari warna kedua — stop tengah gradien
+            darken(enhanceColorVividness(Color(secondSwatch.rgb), FALLBACK_SATURATION_FACTOR), 0.6f)
+        } else {
+            darken(primary, 0.6f)
+        }
+        return ExtractedArtworkColors(primary = primary, secondary = secondary)
+    }
+
+    /** Apakah warna cukup hidup untuk aksen? (ambang Meld) */
+    private fun isColorVibrant(color: Color): Boolean {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(color.toArgb(), hsv)
+        return hsv[1] > 0.25f && hsv[2] > 0.2f && hsv[2] < 0.9f
+    }
+
+    /**
+     * Naikkan vividness: saturasi ×[saturationFactor], nilai ×0.9 lalu
+     * dijepit 0.4..0.85 — konstanta Meld `PlayerColorExtractor.Config`.
+     */
+    fun enhanceColorVividness(color: Color, saturationFactor: Float): Color {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(color.toArgb(), hsv)
+        hsv[1] = (hsv[1] * saturationFactor).coerceIn(0f, 1f)
+        hsv[2] = (hsv[2] * BRIGHTNESS_MULTIPLIER).coerceIn(BRIGHTNESS_MIN, BRIGHTNESS_MAX)
+        return Color(android.graphics.Color.HSVToColor(hsv))
+    }
+
+    /** Bobot swatch: dominasi (populasi) × bonus kejenuhan — formula Meld. */
+    private fun swatchWeight(swatch: Palette.Swatch): Float {
+        val hsv = FloatArray(3)
+        android.graphics.Color.colorToHSV(swatch.rgb, hsv)
+        val saturation = hsv[1]
+        val brightness = hsv[2]
+        val populationWeight = swatch.population.toFloat() * POPULATION_WEIGHT_MULTIPLIER
+        val vibrancyBonus =
+            if (saturation > 0.3f && brightness > 0.3f) VIBRANCY_BONUS else 1f
+        return populationWeight * vibrancyBonus * (saturation + brightness) / 2f
+    }
+
+    private fun darken(color: Color, factor: Float): Color = Color(
+        red = (color.red * factor).coerceIn(0f, 1f),
+        green = (color.green * factor).coerceIn(0f, 1f),
+        blue = (color.blue * factor).coerceIn(0f, 1f),
+        alpha = color.alpha,
+    )
+
+    // Konstanta disalin dari Meld PlayerColorExtractor.Config (GPL-3.0).
+    private const val VIBRANT_SATURATION_FACTOR = 1.3f
+    private const val FALLBACK_SATURATION_FACTOR = 1.1f
+    private const val BRIGHTNESS_MULTIPLIER = 0.9f
+    private const val BRIGHTNESS_MIN = 0.4f
+    private const val BRIGHTNESS_MAX = 0.85f
+    private const val POPULATION_WEIGHT_MULTIPLIER = 2f
+    private const val VIBRANCY_BONUS = 1.5f
+}
+
+/**
+ * Palet dinamis Now Playing: aksen + gradien ambien dua warna dari sampul
+ * (utama di atas, sekunder lebih gelap di tengah, latar di bawah).
  */
 @Composable
 fun rememberDynamicArtworkPalette(
@@ -52,36 +213,34 @@ fun rememberDynamicArtworkPalette(
 ): DynamicArtworkPalette {
     val context = LocalContext.current
     val currentBg = LyreonBackground
-    var extractedColor by remember(thumbnailUrl) {
-        mutableStateOf(
-            if (!thumbnailUrl.isNullOrBlank()) colorCache[thumbnailUrl] ?: fallbackColor
-            else fallbackColor,
+    var extracted by remember(thumbnailUrl) {
+        mutableStateOf<ExtractedArtworkColors?>(
+            if (!thumbnailUrl.isNullOrBlank()) extractedCache[thumbnailUrl] else null,
         )
     }
 
     LaunchedEffect(thumbnailUrl) {
         if (thumbnailUrl.isNullOrBlank()) {
-            extractedColor = fallbackColor
+            extracted = null
             return@LaunchedEffect
         }
-        val cached = colorCache[thumbnailUrl]
-        if (cached != null) {
-            extractedColor = cached
-            return@LaunchedEffect
-        }
-
-        val color = withContext(Dispatchers.IO) {
-            extractDominantColor(context, thumbnailUrl) ?: fallbackColor
-        }
-        colorCache[thumbnailUrl] = color
-        extractedColor = color
+        val colors = PlayerColorExtractor.extract(context, thumbnailUrl)
+        if (colors != null) extracted = colors
     }
+
+    val accentSource = extracted?.primary ?: fallbackColor
+    val secondarySource = extracted?.secondary ?: darkenStatic(fallbackColor, 0.6f)
 
     // Transisi warna halus saat berganti lagu
     val animAccent by animateColorAsState(
-        targetValue = extractedColor,
+        targetValue = accentSource,
         animationSpec = tween(durationMillis = 600),
         label = "playerAccent",
+    )
+    val animSecondary by animateColorAsState(
+        targetValue = secondarySource,
+        animationSpec = tween(durationMillis = 600),
+        label = "playerSecondary",
     )
 
     val ambientTop by animateColorAsState(
@@ -90,7 +249,7 @@ fun rememberDynamicArtworkPalette(
         label = "ambientTop",
     )
     val ambientMiddle by animateColorAsState(
-        targetValue = animAccent.copy(alpha = 0.12f),
+        targetValue = animSecondary.copy(alpha = 0.14f),
         animationSpec = tween(durationMillis = 600),
         label = "ambientMiddle",
     )
@@ -127,52 +286,9 @@ fun rememberDynamicArtworkPalette(
     }
 }
 
-private suspend fun extractDominantColor(context: Context, url: String): Color? = runCatching {
-    val loader = ImageLoader(context)
-    val request = ImageRequest.Builder(context)
-        .data(url)
-        .size(64, 64)
-        .build()
-
-    val result = loader.execute(request)
-    if (result !is SuccessResult) return null
-
-    val bitmap = result.image.toBitmap()
-    val width = bitmap.width
-    val height = bitmap.height
-    if (width <= 0 || height <= 0) return null
-
-    val pixels = IntArray(width * height)
-    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
-
-    // Analisis histogram warna (menghindari hitam/putih ekstrem, prioritaskan vibran)
-    var bestColor: Color? = null
-    var bestScore = -1f
-
-    val hsv = FloatArray(3)
-    for (pixel in pixels) {
-        val r = (pixel shr 16) and 0xFF
-        val g = (pixel shr 8) and 0xFF
-        val b = pixel and 0xFF
-        android.graphics.Color.RGBToHSV(r, g, b, hsv)
-
-        val saturation = hsv[1]
-        val value = hsv[2]
-
-        // Filter warna yang terlalu gelap atau terlalu pudar
-        if (value < 0.2f || value > 0.95f || saturation < 0.25f) continue
-
-        // Skor vibran = keseimbangan antara saturasi & kecerahan
-        val score = saturation * 0.7f + (1f - kotlin.math.abs(value - 0.65f)) * 0.3f
-        if (score > bestScore) {
-            bestScore = score
-            // Clamp value untuk keterbacaan
-            val clampedValue = value.coerceIn(0.5f, 0.85f)
-            val clampedSat = saturation.coerceIn(0.45f, 0.95f)
-            val finalColorInt = android.graphics.Color.HSVToColor(floatArrayOf(hsv[0], clampedSat, clampedValue))
-            bestColor = Color(finalColorInt)
-        }
-    }
-
-    bestColor
-}.getOrNull()
+private fun darkenStatic(color: Color, factor: Float): Color = Color(
+    red = (color.red * factor).coerceIn(0f, 1f),
+    green = (color.green * factor).coerceIn(0f, 1f),
+    blue = (color.blue * factor).coerceIn(0f, 1f),
+    alpha = color.alpha,
+)

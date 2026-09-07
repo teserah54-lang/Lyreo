@@ -6,10 +6,8 @@
 package com.lyreon.app.ui.theme
 
 import android.animation.ValueAnimator
-import androidx.compose.animation.BoundsTransform
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
-import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.SpringSpec
 import androidx.compose.animation.core.TweenSpec
@@ -24,7 +22,6 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
 import androidx.compose.runtime.staticCompositionLocalOf
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntOffset
 
 // ------------------------------------------------------------------
@@ -172,29 +169,12 @@ fun lyreonScreenPopExit(reduceMotion: Boolean): ExitTransition =
     }
 
 // ------------------------------------------------------------------
-// Shared element / hero transition (artwork mini player ⇄ Now Playing).
-//
-// Dipakai `Modifier.sharedBounds(...)` — spec bounds dioper sebagai
-// `boundsTransform`, fade konten sebagai `enter`/`exit`. Semua menghormati
-// reduce motion: spring tema runtuh jadi ~instan, fade jadi 0 ms.
 // ------------------------------------------------------------------
-
-/** Spec morph bounds untuk hero transition; spring tema (instan saat reduce motion). */
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-fun lyreonSharedBoundsTransform(): BoundsTransform {
-    val spec =
-        lyreonSpring<Rect>(
-            dampingRatio = LyreonMotion.dampingCalm,
-            stiffness = LyreonMotion.stiffnessGentle,
-        )
-    return BoundsTransform { _, _ -> spec }
-}
-
-/** Fade masuk konten di dalam shared bounds (menghormati reduce motion). */
-@Composable
-fun lyreonSharedEnter(): EnterTransition = fadeIn(lyreonTween(LyreonMotion.normal))
-
-/** Fade keluar konten di dalam shared bounds (menghormati reduce motion). */
-@Composable
-fun lyreonSharedExit(): ExitTransition = fadeOut(lyreonTween(LyreonMotion.normal))
+// Shared element / hero transition — DIHAPUS 2026-09-07.
+//
+// Helper sharedBounds (artwork mini player ⇄ Now Playing) dicabut bersama
+// SharedTransitionLayout di MainActivity setelah morph-nya macet raksasa
+// saat aksen tema berganti di tengah transisi (lihat notes/01 §B7).
+// Transisi layar kini digerakkan oleh geser+pudar + motion blur per-halaman
+// (ui/theme/MotionBlur.kt — pageMotionBlur).
+// ------------------------------------------------------------------

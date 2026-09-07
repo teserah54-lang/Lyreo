@@ -36,6 +36,7 @@ import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeStreamLi
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeTrendingLinkHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
+import org.schabi.newpipe.extractor.stream.StreamType
 import org.schabi.newpipe.extractor.stream.VideoStream
 import org.schabi.newpipe.extractor.stream.StreamInfoItem
 import java.io.IOException
@@ -276,7 +277,9 @@ class YouTubeRepository {
         val playlists = mutableListOf<YtPlaylist>()
         items.forEach { item ->
             when (item) {
-                is StreamInfoItem -> mapInfoItem(item)?.let(tracks::add)
+                // Siaran langsung yang sedang berjalan tidak masuk hasil lagu
+                // (durasi yang terus bertambah = antrean yang mustahil diputar).
+                is StreamInfoItem -> if (!isOngoingLive(item)) mapInfoItem(item)?.let(tracks::add)
                 is PlaylistInfoItem -> playlists.add(
                     YtPlaylist(
                         url = item.url.orEmpty(),
@@ -294,6 +297,10 @@ class YouTubeRepository {
             playlists = playlists.distinctBy { it.url },
         )
     }
+
+    /** Sedang siaran langsung sekarang? (durasi live terus bertambah) */
+    private fun isOngoingLive(item: StreamInfoItem): Boolean =
+        item.streamType == StreamType.LIVE_STREAM || item.streamType == StreamType.AUDIO_LIVE_STREAM
 
     suspend fun suggestions(query: String): List<String> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
@@ -323,6 +330,9 @@ class YouTubeRepository {
         )
         val related = info.relatedItems.orEmpty()
             .filterIsInstance<StreamInfoItem>()
+            // Radio/quick picks = feed MUSIK: buang siaran langsung, podcast
+            // jam-jam, dan klip pendek (lihat musicEligible).
+            .filter { musicEligible(it, minSec = 45L, maxSec = 3_600L) }
             .mapNotNull { mapInfoItem(it) }
             .filter { it.durationSec > 0 }
             .distinctBy { it.videoId }
@@ -649,6 +659,10 @@ class YouTubeRepository {
             val rel = relatedOf(seedVideoId)
             if (rel.isNotEmpty()) return@withContext rel.take(12)
         }
+        // Tanpa benih riwayat → lagu tren charts YouTube Music (musik murni),
+        // bukan pencarian bebas yang bisa membocorkan konten non-musik.
+        val chartSongs = runCatching { fetchChartsPage("US").songs }.getOrDefault(emptyList())
+        if (chartSongs.isNotEmpty()) return@withContext chartSongs.take(12)
         val primary = runCatching {
             val session = newSearchSession("today's hits music", SearchFilter.SONGS)
             mapSearchItems(session.first()).tracks.take(12)
@@ -745,25 +759,67 @@ class YouTubeRepository {
     }
 
     // ------------------------------------------------------------------
-    // Trending per negara (halaman "Trending" YouTube, region via ?gl=)
+    // Trending per negara — UTAMA: YouTube Music Charts (lagu resmi, tanpa
+    // siaran langsung/podcast), CADANGAN: feed "Trending" YouTube umum yang
+    // difilter ketat sebagai musik via [musicEligible].
     // ------------------------------------------------------------------
 
     suspend fun trending(country: String): List<LyreonTrack> = withContext(Dispatchers.IO) {
+        val gl = country.uppercase()
+        // 1) Charts YouTube Music — cara Meld menampilkan tren (ChartsPage):
+        //    daftar lagu resmi, bebas siaran langsung & konten non-musik.
+        synchronized(chartsLock) {
+            chartsSongsCache[gl]?.takeIf { System.currentTimeMillis() - it.first < 30L * 60_000L }
+        }?.let { return@withContext it.second }
+
+        val chartSongs = runCatching { fetchChartsPage(gl).songs }.getOrDefault(emptyList())
+        if (chartSongs.isNotEmpty()) {
+            synchronized(chartsLock) { chartsSongsCache[gl] = System.currentTimeMillis() to chartSongs }
+            return@withContext chartSongs
+        }
+
+        // 2) Cadangan: feed Trending YouTube umum — hanya item yang terbukti
+        //    musik on-demand (bukan siaran langsung, bukan podcast panjang).
         runCatching {
-            val url = "https://www.youtube.com/feed/trending?gl=${country.uppercase()}"
+            val url = "https://www.youtube.com/feed/trending?gl=$gl"
             val handler = YoutubeTrendingLinkHandlerFactory().fromUrl(url)
             val extractor = YoutubeTrendingExtractor(ServiceList.YouTube, handler, "Trending")
             // Region TIDAK dibaca dari ?gl= URL — harus dipaksa per-instance,
             // kalau tidak extractor selalu pakai content country default global.
-            extractor.forceContentCountry(ContentCountry(country.uppercase()))
+            extractor.forceContentCountry(ContentCountry(gl))
             extractor.fetchPage()
             extractor.initialPage.items.orEmpty()
                 .filterIsInstance<StreamInfoItem>()
+                .filter { musicEligible(it, minSec = 60L, maxSec = 3_600L) }
                 .mapNotNull { mapInfoItem(it) }
                 .filter { it.durationSec > 60L } // buang shorts/klip pendek
                 .distinctBy { it.videoId }
                 .take(24)
         }.getOrDefault(emptyList())
+    }
+
+    /**
+     * Item ini layak masuk feed MUSIK (Beranda/tren/radio/quick picks)?
+     *
+     * Siaran langsung (`LIVE_STREAM`/`AUDIO_LIVE_STREAM`) dan rekaman siaran
+     * (`POST_LIVE_STREAM` — VOD podcast/konser) bukan musik on-demand; merekalah
+     * yang membuat Beranda menampilkan "video live streaming" seolah tren musik.
+     * Perhatikan jebakan durasinya: siaran langsung yang sudah berjalan 3 jam
+     * melaporkan durasi ±3 jam (bukan −1), jadi filter `duration > 60` TIDAK
+     * cukup — `StreamType` wajib diperiksa.
+     */
+    private fun musicEligible(item: StreamInfoItem, minSec: Long = 30L, maxSec: Long = 3_600L): Boolean {
+        when (item.streamType) {
+            StreamType.LIVE_STREAM,
+            StreamType.AUDIO_LIVE_STREAM,
+            StreamType.POST_LIVE_STREAM,
+            -> return false
+            StreamType.NONE,
+            -> return false
+            else -> Unit
+        }
+        val d = item.duration
+        return d in minSec..maxSec
     }
 
     fun invalidate(videoId: String) {
@@ -866,15 +922,23 @@ class YouTubeRepository {
         streamCache[videoId]?.takeIf { it.isManifest }?.let { it.url to it.mimeType }
 
     // ------------------------------------------------------------------
-    // Artis populer per benua — YouTube Music Charts (InnerTube FEmusic_charts)
+    // Artis populer per benua + TREN MUSIK — YouTube Music Charts
+    // (InnerTube FEmusic_charts)
     //
-    // Diagram alur (mengikuti cara InnerTune/Spotube):
+    // Diagram alur (mengikuti cara InnerTune/Spotube/Meld):
     //   GET music.youtube.com  →  regex INNERTUBE_API_KEY  →
     //   POST /youtubei/v1/browse?key=…  { browseId: "FEmusic_charts", gl }
-    //   →  sectionListRenderer → musicShelfRenderer "Top artists"
+    //   →  sectionListRenderer → musicShelfRenderer "Top artists" / "Trending"
     //
-    // Bila charts tidak tersedia/gagal parse → daftar kurasi per wilayah,
-    // sehingga kartu artis TIDAK PERNAH kosong.
+    // Meld (`innertube/.../pages/ChartsPage.kt` + `YouTube.getChartsPage()`)
+    // memakai halaman yang sama sebagai sumber tren mereka. Alasannya sama
+    // seperti keputusan kita di sini: feed "Trending" YouTube UMUM berisi
+    // siaran langsung, podcast, dan vlog — bukan hanya musik. Charts YouTube
+    // Music adalah daftar LAGU resmi: tidak ada siaran langsung di dalamnya.
+    //
+    // Bila charts tidak tersedia/gagal parse → daftar kurasi per wilayah
+    // (artis) dan feed Trending umum yang difilter ketat sebagai musik
+    // (lihat [musicEligible]).
     // ------------------------------------------------------------------
 
     data class ArtistCard(
@@ -898,6 +962,7 @@ class YouTubeRepository {
     private var innertubeKey: String? = null
     private val chartsLock = Any()
     private val chartsCache = HashMap<String, Pair<Long, List<ArtistCard>>>()
+    private val chartsSongsCache = HashMap<String, Pair<Long, List<LyreonTrack>>>()
 
     suspend fun topArtists(region: ArtistRegion): List<ArtistCard> = withContext(Dispatchers.IO) {
         synchronized(chartsLock) {
@@ -905,7 +970,7 @@ class YouTubeRepository {
                 ?.takeIf { System.currentTimeMillis() - it.first < 6L * 3600_000L }
         }?.let { return@withContext it.second }
 
-        val live = runCatching { fetchChartsTopArtists(region.gl) }.getOrDefault(emptyList())
+        val live = runCatching { fetchChartsPage(region.gl).artists }.getOrDefault(emptyList())
         // Foto profil asli kanal diisi untuk entri tanpa foto (via pencarian kanal)
         val result = enrichArtistAvatars(live.ifEmpty { seedArtists(region) })
         synchronized(chartsLock) { chartsCache[region.gl] = System.currentTimeMillis() to result }
@@ -930,8 +995,25 @@ class YouTubeRepository {
         return (key ?: "AIzaSyC9XL3ZjWddXya6X74dJoCTL-WEYFDNX30").also { innertubeKey = it }
     }
 
-    private fun fetchChartsTopArtists(gl: String): List<ArtistCard> {
+    /** Hasil parse satu halaman FEmusic_charts: rak artis + rak lagu tren. */
+    private class ChartsPageData(
+        val artists: List<ArtistCard> = emptyList(),
+        val songs: List<LyreonTrack> = emptyList(),
+    )
+
+    /**
+     * Ambil & parse FEmusic_charts sekali jalan: rak "Top artists" →
+     * [ChartsPageData.artists], rak "Trending"/"Top songs" → [ChartsPageData.songs].
+     *
+     * Bentuk baris lagu: `musicResponsiveListItemRenderer` dengan
+     * flexColumns[0]=judul, [1]=artis, `navigationEndpoint.watchEndpoint.videoId`,
+     * plus thumbnail di `thumbnail.musicThumbnailRenderer`. Pola yang sama
+     * dipakai Meld di `convertToChartItem` (`innertube/.../YouTube.kt`).
+     */
+    private fun fetchChartsPage(gl: String): ChartsPageData {
         val key = fetchInnertubeKey()
+        // params "ggMGCgQIgAQ%3D" = tab tren charts — disalin dari Meld
+        // (`YouTube.getChartsPage()`); base64 protobuf, tidak boleh dikarang.
         val payload = JSONObject()
             .put(
                 "context",
@@ -945,6 +1027,7 @@ class YouTubeRepository {
                 ),
             )
             .put("browseId", "FEmusic_charts")
+            .put("params", "ggMGCgQIgAQ%3D")
             .toString()
             .toRequestBody("application/json".toMediaType())
 
@@ -957,8 +1040,8 @@ class YouTubeRepository {
 
         val root = LyreonHttp.streamClient.newCall(req).execute().use { resp ->
             if (!resp.isSuccessful) {
-                Log.w(TAG, "fetchChartsTopArtists(gl=$gl): browse gagal, HTTP ${resp.code}")
-                return emptyList()
+                Log.w(TAG, "fetchChartsPage(gl=$gl): browse gagal, HTTP ${resp.code}")
+                return ChartsPageData()
             }
             JSONObject(resp.body.string())
         }
@@ -970,9 +1053,12 @@ class YouTubeRepository {
             return sb.toString()
         }
 
+        val artists = ArrayList<ArtistCard>(12)
+        val songs = ArrayList<LyreonTrack>(24)
+
         val tabs = root.optJSONObject("contents")
             ?.optJSONObject("singleColumnBrowseResultsRenderer")
-            ?.optJSONArray("tabs") ?: return emptyList()
+            ?.optJSONArray("tabs") ?: return ChartsPageData()
 
         for (t in 0 until tabs.length()) {
             val sections = tabs.optJSONObject(t)
@@ -984,10 +1070,8 @@ class YouTubeRepository {
             for (s in 0 until sections.length()) {
                 val shelf = sections.optJSONObject(s)?.optJSONObject("musicShelfRenderer") ?: continue
                 val title = textOf(shelf.optJSONObject("title"), "text")
-                if (!title.contains("artist", ignoreCase = true)) continue
 
                 val items = shelf.optJSONArray("contents") ?: continue
-                val out = ArrayList<ArtistCard>(12)
                 for (i in 0 until items.length()) {
                     val row = items.optJSONObject(i)
                         ?.optJSONObject("musicResponsiveListItemRenderer") ?: continue
@@ -995,10 +1079,8 @@ class YouTubeRepository {
                     val name = textOf(flex.optJSONObject(0), "musicResponsiveListItemFlexColumnRenderer")
                     if (name.isBlank()) continue
                     val sub = textOf(flex.optJSONObject(1), "musicResponsiveListItemFlexColumnRenderer")
-                    val artistBrowseId = row.optJSONObject("navigationEndpoint")
-                        ?.optJSONObject("browseEndpoint")
-                        ?.optString("browseId")
-                        .orEmpty()
+
+                    // Thumbnail terbesar
                     val thumbs = row.optJSONObject("thumbnail")
                         ?.optJSONObject("musicThumbnailRenderer")
                         ?.optJSONObject("thumbnail")
@@ -1015,13 +1097,66 @@ class YouTubeRepository {
                             }
                         }
                     }
-                    out += ArtistCard(name = name, thumbUrl = thumb, subtitle = sub, browseId = artistBrowseId)
-                    if (out.size >= 12) break
+
+                    if (title.contains("artist", ignoreCase = true)) {
+                        val artistBrowseId = row.optJSONObject("navigationEndpoint")
+                            ?.optJSONObject("browseEndpoint")
+                            ?.optString("browseId")
+                            .orEmpty()
+                        if (artists.size < 12) {
+                            artists += ArtistCard(
+                                name = name,
+                                thumbUrl = absUrl(thumb),
+                                subtitle = sub,
+                                browseId = artistBrowseId,
+                            )
+                        }
+                    } else {
+                        // Rak lagu ("Trending" / "Top songs" / "Top tracks").
+                        // Wajib punya watchEndpoint → itu yang bisa diputar.
+                        val videoId = row.optJSONObject("navigationEndpoint")
+                            ?.optJSONObject("watchEndpoint")
+                            ?.optString("videoId")
+                            .orEmpty()
+                        if (videoId.isBlank() || songs.size >= 24) continue
+                        // Durasi (kolom terakhir, teks "3:45") — baris tanpa
+                        // durasi bukan lagu on-demand.
+                        var durationSec = 0L
+                        for (c in flex.length() - 1 downTo 1) {
+                            val d = parseClockDuration(
+                                textOf(flex.optJSONObject(c), "musicResponsiveListItemFlexColumnRenderer"),
+                            )
+                            if (d > 0) {
+                                durationSec = d
+                                break
+                            }
+                        }
+                        songs += LyreonTrack(
+                            videoId = videoId,
+                            title = name,
+                            artist = sub,
+                            album = "",
+                            durationSec = durationSec,
+                            thumbnailUrl = thumbHi(videoId, absUrl(thumb)),
+                        )
+                    }
                 }
-                if (out.isNotEmpty()) return out
             }
+            if (artists.isNotEmpty() || songs.isNotEmpty()) break
         }
-        return emptyList()
+        return ChartsPageData(artists = artists, songs = songs.distinctBy { it.videoId })
+    }
+
+    /** "3:45" / "1:02:33" → detik; 0 bila bukan durasi jam-menit-detik. */
+    private fun parseClockDuration(text: String): Long {
+        val m = Regex("^(\\d{1,2}):(\\d{2})(?::(\\d{2}))?$").find(text.trim()) ?: return 0L
+        val (a, b) = m.destructured
+        val extra = m.groupValues.getOrNull(3)?.toLongOrNull() ?: 0L
+        return if (extra > 0) {
+            a.toLong() * 3600 + b.toLong() * 60 + extra
+        } else {
+            a.toLong() * 60 + b.toLong()
+        }
     }
 
     /** Kurasi bila charts wilayah tak tersedia — kartu tetap terisi bermakna. */

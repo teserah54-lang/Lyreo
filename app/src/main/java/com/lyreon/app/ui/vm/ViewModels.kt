@@ -371,7 +371,11 @@ class HomeViewModel(private val locator: ServiceLocator) : ViewModel() {
 
 data class SearchUiState(
     val query: String = "",
-    val filter: SearchFilter = SearchFilter.SONGS,
+    // Default SEMUA — pola Meld (`OnlineSearchResult.kt`): filter null/SEMUA
+    // menampilkan halaman ringkasan (lagu + artis + album + playlist sekaligus),
+    // chip lain memfilter ke satu jenis. Sebelumnya default LAGU sehingga
+    // artis/album/playlist tidak terlihat sampai pengguna memilih chip.
+    val filter: SearchFilter = SearchFilter.ALL,
     val suggestions: List<String> = emptyList(),
     val tracks: List<LyreonTrack> = emptyList(),
     /** Lagu dari perangkat (MediaStore + folder kustom) yang cocok dengan kueri. */
