@@ -13,7 +13,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -22,10 +21,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.CreateNewFolder
@@ -37,6 +34,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -49,7 +49,9 @@ import com.lyreon.app.R
 import com.lyreon.app.data.model.LyreonTrack
 import com.lyreon.app.local.LocalMusicRepository
 import com.lyreon.app.player.PlayerUiState
-import com.lyreon.app.ui.components.TrackRow
+import com.lyreon.app.ui.components.GroupedTrackList
+import com.lyreon.app.ui.components.LibraryGroup
+import com.lyreon.app.ui.components.LibraryGroupSelector
 import com.lyreon.app.ui.theme.LyreonBackground
 import com.lyreon.app.ui.theme.LyreonCrimson
 import com.lyreon.app.ui.theme.LyreonLine
@@ -77,6 +79,7 @@ fun LocalMusicContent(
 ) {
     val vm: LocalMusicViewModel = lyreonViewModel { LocalMusicViewModel(it) }
     val state by vm.state.collectAsStateWithLifecycle()
+    var group by remember { mutableStateOf(LibraryGroup.SONGS) }
 
     // Cek ulang izin setiap kembali ke layar (user bisa ubah dari Settings Android)
     LifecycleResumeEffect(Unit) {
@@ -277,24 +280,20 @@ fun LocalMusicContent(
             }
 
             else -> {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 96.dp),
-                ) {
-                    itemsIndexed(state.tracks, key = { _, t -> t.videoId }) { index, track ->
-                        TrackRow(
-                            track = track,
-                            isActive = playerState.currentTrack?.videoId == track.videoId,
-                            isPlaying = playerState.isPlaying,
-                            isLiked = likedIds.contains(track.videoId),
-                            isDownloaded = downloadedIds.contains(track.videoId),
-                            index = index,
-                            onPlay = { onPlayQueue(state.tracks, index) },
-                            onLike = { onLike(track) },
-                            onMore = { onTrackMore(track) },
-                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                        )
-                    }
+                Column(Modifier.fillMaxSize()) {
+                    LibraryGroupSelector(group = group, onSelect = { group = it })
+                    Spacer(Modifier.height(4.dp))
+                    GroupedTrackList(
+                        tracks = state.tracks,
+                        group = group,
+                        playerState = playerState,
+                        onPlayQueue = onPlayQueue,
+                        onTrackMore = onTrackMore,
+                        onLike = onLike,
+                        likedIds = likedIds,
+                        downloadedIds = downloadedIds,
+                        modifier = Modifier.fillMaxSize(),
+                    )
                 }
             }
         }

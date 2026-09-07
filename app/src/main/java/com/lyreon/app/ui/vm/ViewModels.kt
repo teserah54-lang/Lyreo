@@ -832,6 +832,10 @@ class PlaylistViewModel(private val locator: ServiceLocator, val playlistId: Lon
     fun rename(name: String) {
         viewModelScope.launch { locator.library.renamePlaylist(playlistId, name) }
     }
+
+    fun delete() {
+        viewModelScope.launch { locator.library.deletePlaylistById(playlistId) }
+    }
 }
 
 // ======================================================================

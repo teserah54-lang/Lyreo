@@ -68,10 +68,12 @@ fun PlaylistDetailScreen(
     onLike: (LyreonTrack) -> Unit,
     likedIds: Set<String>,
     downloadedIds: Set<String>,
+    onDelete: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val tracks by vm.tracks.collectAsStateWithLifecycle()
     var showRename by remember { mutableStateOf(false) }
+    var showDelete by remember { mutableStateOf(false) }
     var nameState by remember(playlistName) { mutableStateOf(playlistName) }
 
     Column(
@@ -100,6 +102,9 @@ fun PlaylistDetailScreen(
             }
             IconButton(onClick = { showRename = true }) {
                 Icon(Icons.Filled.Edit, contentDescription = stringResource(R.string.action_rename), tint = LyreonTextSecondary)
+            }
+            IconButton(onClick = { showDelete = true }) {
+                Icon(Icons.Filled.DeleteOutline, contentDescription = stringResource(R.string.action_delete), tint = LyreonTextSecondary)
             }
         }
 
@@ -196,6 +201,33 @@ fun PlaylistDetailScreen(
                 showRename = false
             },
             onDismiss = { showRename = false },
+        )
+    }
+
+    if (showDelete) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDelete = false },
+            containerColor = com.lyreon.app.ui.theme.LyreonElevated,
+            title = { Text(stringResource(R.string.delete_playlist_title), style = MaterialTheme.typography.labelMedium, color = LyreonCrimson) },
+            text = {
+                Text(
+                    stringResource(R.string.delete_playlist_body, nameState),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = LyreonTextSecondary,
+                )
+            },
+            confirmButton = {
+                androidx.compose.material3.TextButton(onClick = {
+                    vm.delete()
+                    showDelete = false
+                    onDelete()
+                }) { Text(stringResource(R.string.action_delete), style = MaterialTheme.typography.labelMedium, color = LyreonCrimson) }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDelete = false }) {
+                    Text(stringResource(R.string.action_cancel), style = MaterialTheme.typography.labelMedium, color = LyreonTextSecondary)
+                }
+            },
         )
     }
 }

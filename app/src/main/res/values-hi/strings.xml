@@ -269,6 +269,8 @@
     <string name="local_rescan">फिर से स्कैन करें</string>
     <string name="local_add_folder">संगीत फ़ोल्डर चुनें</string>
     <string name="local_remove_folder">फ़ोल्डर हटाएँ</string>
+    <string name="unknown_album">अज्ञात एल्बम</string>
+    <string name="unknown_artist">अज्ञात कलाकार</string>
 
     <!-- v3.3 -->
     <string name="home_search_hint">गाने, कलाकार या पॉडकास्ट खोजें…</string>

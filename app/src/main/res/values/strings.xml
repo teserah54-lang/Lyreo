@@ -300,6 +300,8 @@
     <string name="local_rescan">Pindai ulang</string>
     <string name="local_add_folder">Pilih folder musik</string>
     <string name="local_remove_folder">Hapus folder</string>
+    <string name="unknown_album">Album tidak diketahui</string>
+    <string name="unknown_artist">Artis tidak diketahui</string>
 
     <!-- v3.3: home search, nama, hitung mundur, trending, tema kustom -->
     <string name="home_search_hint">Cari lagu, artis, atau podcast…</string>

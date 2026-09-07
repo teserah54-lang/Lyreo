@@ -53,6 +53,9 @@ import com.lyreon.app.data.db.PlaylistEntity
 import com.lyreon.app.data.model.LyreonTrack
 import com.lyreon.app.player.PlayerUiState
 import com.lyreon.app.ui.components.Artwork
+import com.lyreon.app.ui.components.GroupedTrackList
+import com.lyreon.app.ui.components.LibraryGroup
+import com.lyreon.app.ui.components.LibraryGroupSelector
 import com.lyreon.app.ui.components.SectionRule
 import com.lyreon.app.ui.components.TrackRow
 import com.lyreon.app.ui.theme.LyreonTextSecondary
@@ -158,39 +161,26 @@ fun LibraryScreen(
             )
             return@Column
         }
+        if (state.tab == LibraryTab.FAVORIT) {
+            // Tab FAVORIT punya LazyColumn sendiri (lagu/album/artis)
+            FavoriteContent(
+                tracks = state.liked,
+                playerState = playerState,
+                onPlayQueue = onPlayQueue,
+                onTrackMore = onTrackMore,
+                onLike = onLike,
+                likedIds = likedIds,
+                downloadedIds = downloadedIds,
+                modifier = Modifier.fillMaxSize(),
+            )
+            return@Column
+        }
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 96.dp),
         ) {
             when (state.tab) {
-                LibraryTab.LOCAL -> { /* tidak tercapai — ditangani di atas */ }
-
-                LibraryTab.FAVORIT -> {
-                    if (state.liked.isEmpty()) {
-                        item { EmptyNote(stringResource(R.string.library_fav_empty_title), stringResource(R.string.library_fav_empty_body)) }
-                    } else {
-                        item {
-                            PlayAllBar(
-                                label = stringResource(R.string.library_play_all_fav),
-                                onClick = { onPlayQueue(state.liked, 0) },
-                            )
-                        }
-                        itemsIndexed(state.liked, key = { _, t -> t.videoId }) { index, track ->
-                            TrackRow(
-                                track = track,
-                                isActive = playerState.currentTrack?.videoId == track.videoId,
-                                isPlaying = playerState.isPlaying,
-                                isLiked = true,
-                                isDownloaded = downloadedIds.contains(track.videoId),
-                                index = index,
-                                onPlay = { onPlayQueue(state.liked, index) },
-                                onLike = { onLike(track) },
-                                onMore = { onTrackMore(track) },
-                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
-                            )
-                        }
-                    }
-                }
+                LibraryTab.LOCAL, LibraryTab.FAVORIT -> { /* tidak tercapai — ditangani di atas */ }
 
                 LibraryTab.PLAYLIST -> {
                     item {
@@ -419,6 +409,54 @@ internal fun EmptyNote(title: String, body: String) {
         Text(title, style = MaterialTheme.typography.titleSmall, color = LyreonTextPrimary)
         Spacer(Modifier.height(6.dp))
         Text(body, style = MaterialTheme.typography.bodySmall, color = LyreonTextMuted)
+    }
+}
+
+@Composable
+private fun FavoriteContent(
+    tracks: List<LyreonTrack>,
+    playerState: PlayerUiState,
+    onPlayQueue: (List<LyreonTrack>, Int) -> Unit,
+    onTrackMore: (LyreonTrack) -> Unit,
+    onLike: (LyreonTrack) -> Unit,
+    likedIds: Set<String>,
+    downloadedIds: Set<String>,
+    modifier: Modifier = Modifier,
+) {
+    if (tracks.isEmpty()) {
+        Column(
+            modifier = modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+        ) {
+            EmptyNote(
+                stringResource(R.string.library_fav_empty_title),
+                stringResource(R.string.library_fav_empty_body),
+            )
+        }
+        return
+    }
+
+    var group by remember { mutableStateOf(LibraryGroup.SONGS) }
+
+    Column(modifier = modifier.fillMaxSize()) {
+        PlayAllBar(
+            label = stringResource(R.string.library_play_all_fav),
+            onClick = { onPlayQueue(tracks, 0) },
+        )
+        LibraryGroupSelector(group = group, onSelect = { group = it })
+        Spacer(Modifier.height(4.dp))
+        GroupedTrackList(
+            tracks = tracks,
+            group = group,
+            playerState = playerState,
+            onPlayQueue = onPlayQueue,
+            onTrackMore = onTrackMore,
+            onLike = onLike,
+            likedIds = likedIds,
+            downloadedIds = downloadedIds,
+            modifier = Modifier.fillMaxSize(),
+        )
     }
 }
 

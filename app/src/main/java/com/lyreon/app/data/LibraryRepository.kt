@@ -111,6 +111,11 @@ class LibraryRepository(
         libraryDao.deletePlaylist(playlist)
     }
 
+    suspend fun deletePlaylistById(id: Long) {
+        libraryDao.clearPlaylist(id)
+        libraryDao.deletePlaylistById(id)
+    }
+
     suspend fun addToPlaylist(playlistId: Long, track: LyreonTrack) {
         val size = libraryDao.playlistSize(playlistId)
         libraryDao.insertPlaylistItem(

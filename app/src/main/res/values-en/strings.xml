@@ -269,6 +269,8 @@
     <string name="local_rescan">Rescan</string>
     <string name="local_add_folder">Choose music folder</string>
     <string name="local_remove_folder">Remove folder</string>
+    <string name="unknown_album">Unknown album</string>
+    <string name="unknown_artist">Unknown artist</string>
 
     <!-- v3.3 -->
     <string name="home_search_hint">Search songs, artists, or podcasts…</string>

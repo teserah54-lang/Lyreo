@@ -269,6 +269,8 @@
     <string name="local_rescan">重新扫描</string>
     <string name="local_add_folder">选择音乐文件夹</string>
     <string name="local_remove_folder">移除文件夹</string>
+    <string name="unknown_album">未知专辑</string>
+    <string name="unknown_artist">未知艺术家</string>
 
     <!-- v3.3 -->
     <string name="home_search_hint">搜索歌曲、艺人或播客…</string>

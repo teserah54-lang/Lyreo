@@ -269,6 +269,8 @@
     <string name="local_rescan">再スキャン</string>
     <string name="local_add_folder">音楽フォルダを選択</string>
     <string name="local_remove_folder">フォルダを削除</string>
+    <string name="unknown_album">不明なアルバム</string>
+    <string name="unknown_artist">不明なアーティスト</string>
 
     <!-- v3.3 -->
     <string name="home_search_hint">曲・アーティスト・ポッドキャストを検索…</string>

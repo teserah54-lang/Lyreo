@@ -831,6 +831,7 @@ private fun LyreonNavHost(
                 onLike = onLike,
                 likedIds = likedIds,
                 downloadedIds = downloadedIds,
+                onDelete = { navController.popBackStack() },
             )
         }
 

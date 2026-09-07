@@ -269,6 +269,8 @@
     <string name="local_rescan">Imbas semula</string>
     <string name="local_add_folder">Pilih folder muzik</string>
     <string name="local_remove_folder">Buang folder</string>
+    <string name="unknown_album">Album tidak diketahui</string>
+    <string name="unknown_artist">Artis tidak diketahui</string>
 
     <!-- v3.3 -->
     <string name="home_search_hint">Cari lagu, artis atau podcast…</string>
