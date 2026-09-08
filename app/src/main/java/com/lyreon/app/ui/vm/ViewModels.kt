@@ -134,7 +134,7 @@ class HomeViewModel(private val locator: ServiceLocator) : ViewModel() {
                 locator.library.mostPlayed.first().firstOrNull()?.videoId
             }.getOrNull()
             val picks = runCatching {
-                locator.youtube.quickPicks(seed)
+                locator.youtube.quickPicks(seed, deviceCountry())
             }.getOrDefault(emptyList())
             _state.update {
                 it.copy(
@@ -315,7 +315,7 @@ class HomeViewModel(private val locator: ServiceLocator) : ViewModel() {
 
     private fun loadQuickPicks(seed: String?) {
         viewModelScope.launch {
-            val picks = locator.youtube.quickPicks(seed)
+            val picks = locator.youtube.quickPicks(seed, deviceCountry())
             if (picks.isNotEmpty()) {
                 _state.update { it.copy(quickPicks = picks, loading = false) }
             }

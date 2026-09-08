@@ -643,18 +643,75 @@ class YouTubeRepository {
     // Home feed
     // ------------------------------------------------------------------
 
-    /** Quick picks: terkait lagu terakhir yang diputar, atau kurasi awal. */
-    suspend fun quickPicks(seedVideoId: String?): List<LyreonTrack> = withContext(Dispatchers.IO) {
+    /**
+     * Feed beranda asli YouTube Music (`FEmusic_home`).
+     *
+     * Tidak lagi berupa pencarian teks "today's hits music" — itu hanyalah
+     * query arbitrary dan tidak mencerminkan carousel resmi YouTube Music.
+     * Jalur ini memakai `browse` WEB_REMIX yang sama dengan charts/genre-mood,
+     * lalu [BrowseParser] mengubah rak `musicCarouselShelfRenderer` /
+     * `musicShelfRenderer` menjadi [BrowseItem]. Rak beranda yang umum muncul:
+     * Quick Picks, Trending, New releases, dsb.
+     *
+     * Cache-nya dibuat 10 menit, BUKAN 6 jam seperti halaman browse generik:
+     * beranda dirancang untuk cepat berubah, umur 6 jam justru membuat
+     * "trending" menjadi basi.
+     */
+    private val homeFeedLock = Any()
+    private val homeFeedCache = HashMap<String, Pair<Long, List<LyreonTrack>>>()
+    private val HOME_FEED_CACHE_MS = 10L * 60_000L
+
+    suspend fun homeFeed(gl: String = "US", limit: Int = 40): List<LyreonTrack> = withContext(Dispatchers.IO) {
+        val cacheKey = "$gl|$limit"
+        synchronized(homeFeedLock) {
+            homeFeedCache[cacheKey]?.takeIf { System.currentTimeMillis() - it.first < HOME_FEED_CACHE_MS }
+        }?.let { return@withContext it.second }
+
+        val page = runCatching { fetchBrowsePage("FEmusic_home", null, gl) }
+            .getOrDefault(BrowsePage(browseId = "FEmusic_home"))
+        val tracks = page.sections
+            .flatMap { it.items }
+            .filter { it.kind == BrowseItemKind.TRACK && it.videoId.isNotBlank() }
+            .map {
+                LyreonTrack(
+                    videoId = it.videoId,
+                    title = it.title,
+                    artist = it.subtitle.substringBefore(" • "),
+                    album = it.subtitle.substringAfter(" • ", ""),
+                    durationSec = it.durationSec.toLong(),
+                    thumbnailUrl = it.thumbUrl.ifBlank { thumbHi(it.videoId) },
+                )
+            }
+            .distinctBy { it.videoId }
+            .take(limit)
+
+        if (tracks.isNotEmpty()) {
+            synchronized(homeFeedLock) {
+                homeFeedCache[cacheKey] = System.currentTimeMillis() to tracks
+            }
+        }
+        tracks
+    }
+
+    /**
+     * Quick picks: terkait lagu terakhir yang diputar, atau feed beranda
+     * YouTube Music yang sebenarnya.
+     *
+     * @param gl region yang dipakai feed beranda (mis. "ID", "US").
+     */
+    suspend fun quickPicks(seedVideoId: String?, gl: String = "US"): List<LyreonTrack> = withContext(Dispatchers.IO) {
         if (!seedVideoId.isNullOrBlank()) {
             val rel = relatedOf(seedVideoId)
             if (rel.isNotEmpty()) return@withContext rel.take(12)
         }
-        val primary = runCatching {
+        val primary = runCatching { homeFeed(gl = gl, limit = 12) }.getOrNull()
+        if (!primary.isNullOrEmpty()) return@withContext primary
+        // FALLBACK terakhir: search biasa bila feed beranda gagal/parse kosong.
+        val searchPrimary = runCatching {
             val session = newSearchSession("today's hits music", SearchFilter.SONGS)
             mapSearchItems(session.first()).tracks.take(12)
         }.getOrNull()
-        if (!primary.isNullOrEmpty()) return@withContext primary
-        // FALLBACK InnerTube bila Metrolist gagal
+        if (!searchPrimary.isNullOrEmpty()) return@withContext searchPrimary
         fallback.search("today's hits music", SearchFilter.SONGS, 12)
     }
 
@@ -1069,8 +1126,14 @@ class YouTubeRepository {
 
     /**
      * Profil kanal YouTube dari nama artis → (avatarUrl, subtitle subscriber).
-     * Dua langkah: cari kanal (filter "channels") → buka ChannelInfo untuk
-     * avatars + jumlah subscriber (ChannelInfoItem fork ini tak membawa foto).
+     *
+     * Jalur utama sekarang InnerTube /search (WEB_REMIX), sama seperti jalur
+     * browse & charts. YouTube memperketat pencarian kanal dan ChannelInfo lewat
+     * Extractor (SABR/poToken sering membuatnya kosong), sedangkan `musicSearch`
+     * sudah memakai klien WEB_REMIX yang kembali membaca `musicTwoRowItemRenderer`
+     * beserta thumbnail kanal asli.
+     *
+     * Jalur NewPipe hanya dipakai sebagai cadangan bila InnerTube gagal/kosong.
      */
     suspend fun channelProfile(artistName: String): Pair<String, String>? = withContext(Dispatchers.IO) {
         val key = artistName.lowercase(java.util.Locale.ROOT)
@@ -1079,32 +1142,41 @@ class YouTubeRepository {
             val parts = cached.split('|', limit = 3)
             return@withContext (parts.getOrElse(0) { "" } to parts.getOrElse(1) { "" })
         }
-        val result = runCatching {
-            val cf = resolveContentFilter("channels")
-            val extractor = runCatching {
-                ServiceList.YouTube.getSearchExtractor(artistName, listOfNotNull(cf), null)
-            }.getOrElse { ServiceList.YouTube.getSearchExtractor(artistName) }
-            extractor.fetchPage()
-            val channelUrl = extractor.initialPage.items
-                .filterIsInstance<org.schabi.newpipe.extractor.channel.ChannelInfoItem>()
-                .firstOrNull()
-                ?.url.orEmpty()
-            if (channelUrl.isBlank()) {
-                Log.w(TAG, "channelProfile('$artistName'): search kanal kosong (0 hasil filter 'channels')")
-                null
-            } else {
-                val info = org.schabi.newpipe.extractor.channel.ChannelInfo.getInfo(channelUrl)
-                val avatar = absUrl(bestThumb(info.avatars))
-                if (avatar.isBlank()) {
-                    Log.w(TAG, "channelProfile('$artistName'): ChannelInfo OK tapi avatars kosong — url=$channelUrl")
+
+        val innerTube = runCatching {
+            musicSearch(artistName, SearchFilter.ARTISTS, "US").artists
+                .firstOrNull { it.thumbUrl.isNotBlank() }
+                ?.let { absUrl(it.thumbUrl) to it.subtitle }
+        }.getOrNull()
+
+        val result = innerTube?.takeIf { it.first.isNotBlank() }
+            ?: runCatching {
+                val cf = resolveContentFilter("channels")
+                val extractor = runCatching {
+                    ServiceList.YouTube.getSearchExtractor(artistName, listOfNotNull(cf), null)
+                }.getOrElse { ServiceList.YouTube.getSearchExtractor(artistName) }
+                extractor.fetchPage()
+                val channelUrl = extractor.initialPage.items
+                    .filterIsInstance<org.schabi.newpipe.extractor.channel.ChannelInfoItem>()
+                    .firstOrNull()
+                    ?.url.orEmpty()
+                if (channelUrl.isBlank()) {
+                    Log.w(TAG, "channelProfile('$artistName'): search kanal InnerTube kosong + NewPipe kosong")
                     null
                 } else {
-                    avatar to formatSubscribers(runCatching { info.subscriberCount }.getOrDefault(-1L))
+                    val info = org.schabi.newpipe.extractor.channel.ChannelInfo.getInfo(channelUrl)
+                    val avatar = absUrl(bestThumb(info.avatars))
+                    if (avatar.isBlank()) {
+                        Log.w(TAG, "channelProfile('$artistName'): ChannelInfo OK tapi avatars kosong — url=$channelUrl")
+                        null
+                    } else {
+                        avatar to formatSubscribers(runCatching { info.subscriberCount }.getOrDefault(-1L))
+                    }
                 }
-            }
-        }.onFailure { e ->
-            Log.e(TAG, "channelProfile('$artistName') exception: ${e.javaClass.simpleName} — ${e.message}")
-        }.getOrNull()
+            }.onFailure { e ->
+                Log.e(TAG, "channelProfile('$artistName') exception: ${e.javaClass.simpleName} — ${e.message}")
+            }.getOrNull()
+
         channelAvatarCache[key] = result?.let { "${it.first}|${it.second}" } ?: ""
         result
     }

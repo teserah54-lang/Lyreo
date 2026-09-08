@@ -19,6 +19,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
@@ -187,7 +188,12 @@ fun Modifier.motionBlurLayer(
     state: MotionBlurState,
     maxRadius: Dp = MotionBlurTransitionRadius,
     enabled: Boolean = true,
-): Modifier = graphicsLayer {
+): Modifier = clipToBounds().graphicsLayer {
+    // `RenderEffect` pada `graphicsLayer` dibuat terhadap lapisan yang di-render
+    // sendiri. Tanpa clipToBounds terlebih dahulu, Compose tidak punya batas yang
+    // jelas untuk efek blur: pada beberapa perangkat efeknya "bleeding"/tidak
+    // muncul, dan pada perangkat lain malah merender area di luar kontainer.
+    // Urutan ini juga menjamin konten di luar bounds ikut terpotong di fase draw.
     val amount = if (enabled) state.amount else 0f
     renderEffect = if (amount > 0.03f) {
         blurEffectFor(amount * maxRadius.toPx())
