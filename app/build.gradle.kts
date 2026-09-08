@@ -150,6 +150,12 @@ dependencies {
     // `ui/theme/PlayerColorExtractor.kt` untuk atribusi GPL-3.0.
     implementation("androidx.palette:palette-ktx:1.0.0")
 
+    // --- Drag-and-drop reorder antrean (pola Meld Queue.kt) ---
+    // Library yang sama persis dengan Meld (sh.calvin.reorderable 3.0.0,
+    // Apache-2.0, Maven Central) — dipakai ReorderableItem + draggableHandle
+    // di lembar antrean NowPlaying.
+    implementation("sh.calvin.reorderable:reorderable:3.0.0")
+
     // --- Fallback extractor: engine JS ringan untuk menjalankan fungsi decipher
     // (s & n) yang dipanen dari base.js YouTube — jalur InnerTube langsung ke Google,
     // dipakai ketika MetrolistExtractor gagal/stream kosong. API Rhino stabil sejak lama.

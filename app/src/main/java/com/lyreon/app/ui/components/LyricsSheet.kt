@@ -66,15 +66,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lyreon.app.R
 import com.lyreon.app.data.model.LyreonTrack
@@ -90,7 +91,6 @@ import com.lyreon.app.ui.theme.LyreonSurface
 import com.lyreon.app.ui.theme.LyreonTextMuted
 import com.lyreon.app.ui.theme.LyreonTextPrimary
 import com.lyreon.app.ui.theme.LyreonTextSecondary
-import com.lyreon.app.ui.theme.lyreonSpring
 import com.lyreon.app.ui.theme.lyreonTween
 import com.lyreon.app.ui.theme.reduceMotionEnabled
 import com.lyreon.app.ui.utils.fadingEdge
@@ -346,8 +346,9 @@ private fun SyncedLyrics(
 }
 
 /**
- * Satu baris lirik: ukuran huruf tetap (tidak ada reflow), yang dianimasikan
- * adalah alpha + skala + warna — baris aktif membesar halus dan menyala aksen.
+ * Satu baris lirik (pola Meld OriginalLyrics): alpha + warna + UKURAN HURUF
+ * dianimasikan — baris aktif menebal dan membesar, baris lewat memudar.
+ * Ketuk baris = seek ke waktunya.
  */
 @Composable
 private fun LyricsLineView(
@@ -366,10 +367,13 @@ private fun LyricsLineView(
         animationSpec = lyreonTween(LyreonMotion.slow),
         label = "lyrics_alpha",
     )
-    val scale by animateFloatAsState(
-        targetValue = if (active) 1f else 0.94f,
-        animationSpec = lyreonSpring(LyreonMotion.dampingSoft, LyreonMotion.stiffnessBrisk),
-        label = "lyrics_scale",
+    // Baris aktif MEMBESAR HURUFNYA (bukan sekadar skala transform) — pola
+    // Meld OriginalLyrics: ukuran font dianimasikan sehingga teks benar-benar
+    // reflow dan baris aktif terasa "melompat" ke depan.
+    val fontSize by animateFloatAsState(
+        targetValue = if (active) 22f else 17f,
+        animationSpec = lyreonTween(LyreonMotion.slow),
+        label = "lyrics_font",
     )
     val color = when {
         active -> LyreonCrimson
@@ -381,17 +385,17 @@ private fun LyricsLineView(
         text = line.text,
         style = MaterialTheme.typography.titleMedium,
         color = color,
+        fontSize = fontSize.sp,
+        lineHeight = (fontSize + 8f).sp,
+        fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
                 this.alpha = alpha
-                scaleX = scale
-                scaleY = scale
-                transformOrigin = TransformOrigin(0f, 0.5f)
             }
             .clip(RoundedCornerShape(LyreonRadius.sm))
             .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
+            .padding(vertical = 12.dp),
     )
 }
 

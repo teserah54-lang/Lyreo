@@ -215,7 +215,32 @@ relevan sebagai pencegah.
   ```
   Aturan umum: path/glob di dalam KDoc ditulis tanpa karakter bintang ganda.
 
-### B7. Shared-element morph artwork macet raksasa saat tema berganti (2026-09-07)
+### B7. Kotak thumbnail×lirik BERUBAH UKURAN saat isinya berganti (2026-09-07/08)
+
+- **Gejala:** memutar lagu → tema berganti warna → yang terlihat justru "kotak
+  thumbnail × lirik" MEMBESAR menelan layar; tombol tutup tak tertempuh
+  (pengguna terjebak di halaman musik). Dilaporkan dua kali; lapisan
+  penyebabnya ada DUA dan keduanya nyata:
+  1. **morph shared element** mini player ⇄ Now Playing (`sharedBounds`) yang
+     macet saat recomposisi aksen tema di tengah transisi — dicabut 2026-09-07;
+  2. **Crossfade yang menukar SELURUH kolom pemutar dengan halaman lirik** —
+     artinya komponen "thumbnail × lirik" memang berubah ukuran drastis setiap
+     kali lirik dibuka/ditutup, PLUS artwork diketuk = buka lirik (gestur
+     tersembunyi). Lapisan ini baru terlihat setelah lapisan 1 dihapus.
+- **Sebab:** mengganti ukuran kotak untuk berganti isi adalah kebalikan pola
+  Meld: `Player.kt` memakai SATU area utama `Box(weight 1f)` yang isi-nya
+  ditukar lewat `AnimatedContent(showInlineLyrics)` — artwork ⇄ lirik
+  full-bleed — sedangkan bilah atas + kontrol TIDAK PERNAH pindah/hilang.
+  Ukuran stabil = tidak ada yang bisa "membesar".
+- **Perbaikan (2026-09-08):** struktur Meld dipindah utuh ke NowPlayingScreen:
+  `PlayerTopBar` (selalu terlihat, tombol lirik eksplisit) + `PlayerMainArea`
+  (AnimatedContent artwork⇄`LyricsMainArea`) + `PlayerControls` (selalu
+  terlihat). Artwork tidak lagi respons ketuk.
+- **Pencegah:** saat ingin dua tampilan berbagi satu tempat, tukar ISINYA di
+  dalam wadah berukuran tetap — jangan menukar wadahnya. Gestur tersembunyi
+  (ketuk gambar) tidak boleh menjadi satu-satunya pintu ke mode lain.
+
+### B7-catatan-lama. Shared-element morph artwork macet raksasa saat tema berganti (2026-09-07)
 
 - **Gejala:** memutar lagu → Now Playing terbuka → aksen tema berganti mengikuti
   palet sampul (ekstraksi selesai ±ratusan ms kemudian). Yang terlihat bukan

@@ -128,6 +128,9 @@
     <string name="np_like_remove">Hapus dari favorit</string>
     <string name="queue_title">Antrean · %1$d</string>
     <string name="queue_remove">Hapus dari antrean</string>
+    <string name="queue_removed_fmt">Dihapus dari antrean: %1$s</string>
+    <string name="queue_undo">Urungkan</string>
+    <string name="queue_drag_handle">Seret untuk mengurutkan</string>
     <string name="share_chooser">Bagikan lagu</string>
     <string name="video_loading">Menyiapkan video…</string>
     <string name="video_unavailable">Video tidak tersedia - kembali ke mode audio.</string>

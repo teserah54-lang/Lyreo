@@ -979,6 +979,22 @@ class PlayerManager(
         syncFromPlayer(c)
     }
 
+    /**
+     * Sisipkan lagu pada posisi tertentu — dipakai tombol URUNGKAN setelah
+     * menghapus baris antrean (pola Meld: `player.addMediaItem(index, …)`
+     * setelah snackbar undo, lihat Queue.kt).
+     */
+    fun insertAt(index: Int, track: LyreonTrack) {
+        registry[track.videoId] = track
+        val c = controller ?: return
+        if (c.mediaItemCount == 0) {
+            playQueue(listOf(track), autoplay = false)
+            return
+        }
+        c.addMediaItem(index.coerceIn(0, c.mediaItemCount), toMediaItem(track))
+        syncFromPlayer(c)
+    }
+
     fun toggle() {
         val c = controller ?: return
         when {

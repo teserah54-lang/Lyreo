@@ -73,7 +73,7 @@ import kotlin.math.abs
 // ------------------------------------------------------------------
 
 /** Radius maksimum blur saat transisi layar (nilai tertinggi, sesaat). */
-val MotionBlurTransitionRadius: Dp = 16.dp
+val MotionBlurTransitionRadius: Dp = 26.dp
 
 /**
  * Radius efektif maksimum saat gulir cepat. Lapisan blur dipakai bersama dengan
@@ -189,6 +189,9 @@ fun Modifier.pageMotionBlur(
         } else {
             null
         }
+        // Peregangan horizontal kecil mengikuti gerak — kesan "meluncur"
+        // ala iOS: halaman baru tampak menjulur masuk, lalu mengunci pas.
+        scaleX = 1f + amount * 0.05f
     }
 }
 

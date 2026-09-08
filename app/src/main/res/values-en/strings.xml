@@ -116,6 +116,9 @@
     <string name="np_like_remove">Remove from favorites</string>
     <string name="queue_title">Queue · %1$d</string>
     <string name="queue_remove">Remove from queue</string>
+    <string name="queue_removed_fmt">Removed from queue: %1$s</string>
+    <string name="queue_undo">Undo</string>
+    <string name="queue_drag_handle">Drag to reorder</string>
     <string name="share_chooser">Share song</string>
     <string name="video_loading">Preparing video…</string>
     <string name="video_unavailable">Video unavailable - back to audio mode.</string>

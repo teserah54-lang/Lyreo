@@ -24,16 +24,13 @@ import org.schabi.newpipe.extractor.InfoItem
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.Page
 import org.schabi.newpipe.extractor.ServiceList
-import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.localization.Localization
 import org.schabi.newpipe.extractor.playlist.PlaylistInfo
 import org.schabi.newpipe.extractor.playlist.PlaylistInfoItem
 import org.schabi.newpipe.extractor.search.SearchExtractor
 import org.schabi.newpipe.extractor.search.filter.FilterItem
-import org.schabi.newpipe.extractor.services.youtube.extractors.YoutubeTrendingExtractor
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeSearchQueryHandlerFactory
 import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeStreamLinkHandlerFactory
-import org.schabi.newpipe.extractor.services.youtube.linkHandler.YoutubeTrendingLinkHandlerFactory
 import org.schabi.newpipe.extractor.stream.AudioStream
 import org.schabi.newpipe.extractor.stream.StreamInfo
 import org.schabi.newpipe.extractor.stream.StreamType
@@ -277,9 +274,11 @@ class YouTubeRepository {
         val playlists = mutableListOf<YtPlaylist>()
         items.forEach { item ->
             when (item) {
-                // Siaran langsung yang sedang berjalan tidak masuk hasil lagu
-                // (durasi yang terus bertambah = antrean yang mustahil diputar).
-                is StreamInfoItem -> if (!isOngoingLive(item)) mapInfoItem(item)?.let(tracks::add)
+                // Siaran langsung & rekaman siaran (VOD podcast-live) tidak
+                // masuk hasil lagu — keduanya bukan musik on-demand. Catatan:
+                // live yang sedang jalan melaporkan durasi yang TERUS BERTAMBAH,
+                // jadi filter durasi saja tidak akan pernah cukup (notes/01 §B8).
+                is StreamInfoItem -> if (!isLiveType(item)) mapInfoItem(item)?.let(tracks::add)
                 is PlaylistInfoItem -> playlists.add(
                     YtPlaylist(
                         url = item.url.orEmpty(),
@@ -298,9 +297,14 @@ class YouTubeRepository {
         )
     }
 
-    /** Sedang siaran langsung sekarang? (durasi live terus bertambah) */
-    private fun isOngoingLive(item: StreamInfoItem): Boolean =
-        item.streamType == StreamType.LIVE_STREAM || item.streamType == StreamType.AUDIO_LIVE_STREAM
+    /** Siaran langsung ATAU rekaman siaran (VOD)? — bukan musik on-demand. */
+    private fun isLiveType(item: StreamInfoItem): Boolean = when (item.streamType) {
+        StreamType.LIVE_STREAM,
+        StreamType.AUDIO_LIVE_STREAM,
+        StreamType.POST_LIVE_STREAM,
+        -> true
+        else -> false
+    }
 
     suspend fun suggestions(query: String): List<String> = withContext(Dispatchers.IO) {
         if (query.isBlank()) return@withContext emptyList()
@@ -778,23 +782,16 @@ class YouTubeRepository {
             return@withContext chartSongs
         }
 
-        // 2) Cadangan: feed Trending YouTube umum — hanya item yang terbukti
-        //    musik on-demand (bukan siaran langsung, bukan podcast panjang).
+        // 2) Cadangan: pencarian LAGU YouTube Music (filter music_songs — lagu
+        //    on-demand, bukan siaran). Feed "Trending" YouTube umum TIDAK
+        //    dipakai lagi sebagai sumber tren sama sekali: feed itu berisi
+        //    siaran langsung, podcast, dan vlog — persis keluhan "live
+        //    streaming muncul di Beranda padahal bukan musik". Sebagian item
+        //    live bahkan melaporkan StreamType VIDEO sehingga filter jenis
+        //    pun bisa bocor; satu-satunya sumber tren yang dijamin musik
+        //    adalah charts dan pencarian ber-filter musik.
         runCatching {
-            val url = "https://www.youtube.com/feed/trending?gl=$gl"
-            val handler = YoutubeTrendingLinkHandlerFactory().fromUrl(url)
-            val extractor = YoutubeTrendingExtractor(ServiceList.YouTube, handler, "Trending")
-            // Region TIDAK dibaca dari ?gl= URL — harus dipaksa per-instance,
-            // kalau tidak extractor selalu pakai content country default global.
-            extractor.forceContentCountry(ContentCountry(gl))
-            extractor.fetchPage()
-            extractor.initialPage.items.orEmpty()
-                .filterIsInstance<StreamInfoItem>()
-                .filter { musicEligible(it, minSec = 60L, maxSec = 3_600L) }
-                .mapNotNull { mapInfoItem(it) }
-                .filter { it.durationSec > 60L } // buang shorts/klip pendek
-                .distinctBy { it.videoId }
-                .take(24)
+            musicSearch("top songs", SearchFilter.SONGS, gl).songs.take(24)
         }.getOrDefault(emptyList())
     }
 
@@ -809,15 +806,7 @@ class YouTubeRepository {
      * cukup — `StreamType` wajib diperiksa.
      */
     private fun musicEligible(item: StreamInfoItem, minSec: Long = 30L, maxSec: Long = 3_600L): Boolean {
-        when (item.streamType) {
-            StreamType.LIVE_STREAM,
-            StreamType.AUDIO_LIVE_STREAM,
-            StreamType.POST_LIVE_STREAM,
-            -> return false
-            StreamType.NONE,
-            -> return false
-            else -> Unit
-        }
+        if (isLiveType(item)) return false
         val d = item.duration
         return d in minSec..maxSec
     }

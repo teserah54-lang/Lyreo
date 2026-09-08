@@ -212,9 +212,20 @@ di loop lirik alih-alih berlangganan ticker UI 500 ms.
 | `ui/player/Player.kt` (`showInlineLyrics` mengganti seluruh area konten utama) | `LyricsFullPage` di `NowPlayingScreen.kt` | lirik kini HALAMAN PENUH (latar artwork blur + skrim, bilah atas tutup, `LyricsContent` `weight(1f)` tanpa bingkai), bukan lagi lirik di dalam kotak artwork |
 | (desain sendiri, bukan Meld: Meld hanya slide `it/8` + fade) | `ui/theme/MotionBlur.kt` `pageMotionBlur` | motion blur transisi SUNGGUHAN per-halaman: radius diturunkan dari progres `transition` entry NavHost (PreEnter→Visible→PostExit), dominan sumbu-X ala iOS, RenderEffect ter-cache; menggantikan `pulse()` 90 ms di kontainer yang hanya menghasilkan "kedipan blur". Gulir cepat tetap memakai lapis kontainer kecil |
 
-**Yang sengaja tidak diikuti dari Meld (gelombang 4):** shared-element morph artwork
-mini player ⇄ player (Meld tidak memakainya; di Lyreon morph itu pernah macet —
-`notes/01` §B7), dan drag-and-drop antrean penuh (menunggu keputusan library).
+### 4e. Porting gelombang 5 (2026-09-08) — struktur player & antrean penuh
+
+| Dari Meld (GPL-3.0 / Apache-2.0) | Ke Lyreon | Catatan adaptasi |
+|---|---|---|
+| `ui/player/Player.kt` — tata letak potret: `Box(weight 1f)` area utama + `AnimatedContent(showInlineLyrics)` + kontrol selalu terlihat | `NowPlayingScreen.kt`: `PlayerTopBar` + `PlayerMainArea` + `PlayerControls` | akar perbaikan bug fatal "thumbnail membesar" (notes/01 §B7): kotak thumbnail×lirik TIDAK PERNAH berubah ukuran lagi; artwork tidak diketuk; tombol lirik eksplisit di bilah atas |
+| `ui/player/Queue.kt` — drag-reorder (`sh.calvin.reorderable` 3.0.0, `ReorderableItem` + `draggableHandle`), salinan antrean lokal ber-UID, komit saat `isAnyItemDragging` false | lembar antrean `NowPlayingScreen.kt` + `PlayerManager.insertAt` | dependensi baru `sh.calvin.reorderable:reorderable:3.0.0` (sama dengan Meld); UID stabil via pencocokan videoId (Timeline.Window.uid tidak tersedia di Media3 controller); tombol ↑/↓ dihapus, diganti pegangan seret |
+| `Queue.kt` — swipe dua arah + snackbar URUNGKAN | lembar antrean | `rememberSwipeToDismissBoxState(positionalThreshold = { it })` + `SnackbarHost` di dalam lembar; undo = `PlayerManager.insertAt` |
+| `Queue.kt` — ketuk lagu aktif = jeda/main | lembar antrean | `if (active) onToggle() else onPlayAt(index)` |
+| `ui/component/OriginalLyrics.kt` — ukuran font baris aktif dianimasikan | `LyricsSheet.kt` `LyricsLineView` | fontSize 17→22sp + Bold saat aktif (bukan lagi skala transform) |
+
+**Yang sengaja tidak diikuti dari Meld (gelombang 4–5):** shared-element morph
+artwork mini player ⇄ player (Meld tidak memakainya; di Lyreon morph itu pernah
+macet — notes/01 §B7), mode seleksi-bercakram di antrean, dan equalizer bar ala
+`AnimatedContent` baris aktif (GraphicEq statis dipakai dulu).
 
 ## 5. Cara memakai Meld sebagai rujukan harian
 
