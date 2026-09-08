@@ -100,7 +100,10 @@ object PlayerColorExtractor {
             val bitmap = result.image.toBitmap()
 
             val colors = withContext(Dispatchers.Default) {
-                extractFromBitmap(bitmap, LyreonCrimson)
+                // LyreonCrimsonDefault (konstanta), BUKAN LyreonCrimson —
+                // token tema itu getter @Composable yang tak boleh dipanggil
+                // dari fungsi suspend non-komposisi (CI 34171614841).
+                extractFromBitmap(bitmap, LyreonCrimsonDefault)
             } ?: return@withContext null
             extractedCache[thumbnailUrl] = colors
             colors
