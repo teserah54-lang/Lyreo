@@ -10,6 +10,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -284,6 +285,7 @@ fun NowPlayingScreen(
                             isLiked = isLiked,
                             isDownloaded = isDownloaded,
                             showLyrics = showLyrics,
+                            videoMode = videoMode,
                             playerState = playerState,
                             pos = pos,
                             accent = dynamicPalette.accent,
@@ -338,6 +340,7 @@ fun NowPlayingScreen(
                     isLiked = isLiked,
                     isDownloaded = isDownloaded,
                     showLyrics = showLyrics,
+                    videoMode = videoMode,
                     playerState = playerState,
                     pos = pos,
                     accent = dynamicPalette.accent,
@@ -953,9 +956,11 @@ private fun PlayerMainArea(
         } else {
             AnimatedContent(
                 targetState = showLyrics,
+                // tween mentah: transitionSpec berjalan di luar konteks
+                // komposisi (lyreonTween adalah @Composable — CI 34174868041).
                 transitionSpec = {
-                    fadeIn(lyreonTween(LyreonMotion.deliberate)) togetherWith
-                        fadeOut(lyreonTween(LyreonMotion.deliberate))
+                    fadeIn(tween(LyreonMotion.deliberate)) togetherWith
+                        fadeOut(tween(LyreonMotion.deliberate))
                 },
                 label = "np_main_area",
             ) { lyrics ->
@@ -994,6 +999,7 @@ private fun PlayerControls(
     isLiked: Boolean,
     isDownloaded: Boolean,
     showLyrics: Boolean,
+    videoMode: Boolean,
     playerState: PlayerUiState,
     pos: PlayerPosition,
     accent: Color,
