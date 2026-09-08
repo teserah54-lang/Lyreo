@@ -215,6 +215,59 @@ relevan sebagai pencegah.
   ```
   Aturan umum: path/glob di dalam KDoc ditulis tanpa karakter bintang ganda.
 
+### B7. Halaman Now Playing berosilasi saat dibuka (gelombang 9, 2026-09-08)
+
+- **Gejala (dari rekaman layar ±17 detik, tap "Power of Bhangra" di Home):**
+  1. ~4 dtk — kotak artwork raksasa nyaris satu layar, buram, dengan chrome yang
+     strukturnya masih **MiniPlayerBar** (thumbnail kecil + judul + play + skip),
+     bukan bar atas Now Playing. Diam ±5 detik (frame identik).
+  2. ~9,5 dtk — menyusut jadi kotak artwork kecil di atas kanvas gelap kosong.
+  3. ~12,5 dtk — barulah layar benar: bar atas asli, artwork ter-crop, pil
+     MUSIK/VIDEO, judul, kontrol, baris LIRIK/UNDUH.
+  4. ~15 dtk — mengecil lagi lalu **kembali raksasa**. Berulang tiap kali masuk.
+- **Sebab (tiga hal benar yang saling merusak, bukan satu bug):**
+  1. **Satu `SharedContentState` dipakai dua node.** `LyreonRoot` membuat
+     `rememberSharedContentState("now_playing_artwork")` **sekali**, lalu objek yang
+     sama dioper ke `MiniPlayerBar` *dan* ke `NowPlayingScreen`. API-nya menuntut
+     tiap sisi memanggil `rememberSharedContentState` **sendiri** dengan kunci yang
+     sama; satu objek untuk dua node membuat pembukuan `match` saling menimpa →
+     bounds hasil morph tidak pernah selesai (macet, lalu berbalik).
+  2. **Dua sisi hidup di cabang hierarki berbeda, dengan RenderEffect di antaranya.**
+     Mini player ada di `Scaffold.bottomBar`; Now Playing ada di dalam NavHost yang
+     dibungkus `Modifier.motionBlurLayer` (`graphicsLayer { renderEffect = blur }`)
+     yang **berdenyut tepat saat pindah halaman**. Elemen shared digambar di overlay
+     milik `SharedTransitionLayout` dan mengabaikan transformasi lapisan di
+     antaranya → artwork mini digambar pada bounds target (hampir satu layar) dan
+     tampak "buram raksasa" karena thumbnail 44 dp diregangkan.
+  3. **Palette tema adalah `staticCompositionLocalOf`.** Aksen dari sampul
+     (`updateArtworkAccent`) datang asinkron ±beberapa ratus ms setelah lagu ganti —
+     yaitu persis di tengah transisi. CompositionLocal **static** memaksa seluruh
+     pohon di bawah provider dikomposisi ulang (bukan hanya pembaca warna), jadi
+     transisi yang sedang berjalan diguncang dari akar. Dugaan pengguna ("tema ×
+     transisi") benar; jalurnya lewat sifat static ini.
+- **Perbaikan:**
+  - Morph shared-element mini ⇄ Now Playing **dihapus**; diganti hero-lite lokal di
+    `NowPlayingScreen` (skala 0,94→1 + pudar lewat `graphicsLayer`, spec
+    `lyreonSpring`). `graphicsLayer` tidak mengubah layout, jadi tidak ada elemen
+    yang bisa membengkak keluar kotaknya. `lyreonSharedBoundsTransform/Enter/Exit`
+    ikut dihapus dari `Motion.kt`.
+  - `LocalLyreonPalette`: `staticCompositionLocalOf` → `compositionLocalOf`.
+  - Aksen sampul ditunda `ARTWORK_ACCENT_SETTLE_MS` (480 ms > transisi terlama
+    350 ms) sebelum diterapkan ke tema — hanya warna yang tertunda, bukan pemutaran.
+  - Kanvas artwork diberi `clipToBounds()` supaya latar lirik yang diblur tidak
+    pernah bisa melukis di luar kotaknya.
+- **Pencegah:**
+  1. Satu shared element = satu `rememberSharedContentState` **per sisi**. Jangan
+     pernah mengoper objek state-nya lewat parameter.
+  2. Jangan memasang shared element yang melintasi `Scaffold.bottomBar` ⇄ isi
+     NavHost, dan jangan ada `graphicsLayer`/`renderEffect` di antara
+     `SharedTransitionLayout` dan elemennya.
+  3. CompositionLocal yang nilainya berubah **per lagu** tidak boleh static.
+     Static hanya untuk yang praktis tidak pernah berubah (`LocalLyreon`,
+     `LocalReduceMotion`).
+  4. Sebelum menyalahkan satu fitur, cek pasangannya: gejala "A benar, B benar,
+     A+B rusak" hampir selalu soal *kapan* keduanya menulis ke pohon yang sama.
+
 ## C. Daftar periksa cepat sebelum menyimpulkan "ini salah YouTube"
 
 1. `visitor=` di SALIN DIAGNOSTIK bukan `-`? Kalau `-`, perbaiki itu dulu.

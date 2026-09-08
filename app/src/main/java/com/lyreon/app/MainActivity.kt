@@ -7,9 +7,6 @@ package com.lyreon.app
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -119,9 +116,6 @@ import com.lyreon.app.ui.theme.lyreonScreenEnter
 import com.lyreon.app.ui.theme.lyreonScreenExit
 import com.lyreon.app.ui.theme.lyreonScreenPopEnter
 import com.lyreon.app.ui.theme.lyreonScreenPopExit
-import com.lyreon.app.ui.theme.lyreonSharedBoundsTransform
-import com.lyreon.app.ui.theme.lyreonSharedEnter
-import com.lyreon.app.ui.theme.lyreonSharedExit
 import com.lyreon.app.ui.theme.motionBlurLayer
 import com.lyreon.app.ui.theme.rememberMotionBlurState
 import com.lyreon.app.ui.theme.reduceMotionEnabled
@@ -145,6 +139,13 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+
+/**
+ * Jeda sebelum aksen sampul baru diterapkan ke tema (ms). Sedikit lebih panjang
+ * dari transisi layar terlama (`LyreonMotion.deliberate` = 350 ms) supaya
+ * perubahan palet tidak pernah jatuh di tengah animasi pindah halaman.
+ */
+private const val ARTWORK_ACCENT_SETTLE_MS = 480L
 
 class MainActivity : ComponentActivity() {
 
@@ -177,6 +178,14 @@ class MainActivity : ComponentActivity() {
                 val appContext = applicationContext
                 LaunchedEffect(settings.artworkAccent, artworkUrl) {
                     if (settings.artworkAccent) {
+                        // Jeda kecil sebelum warna baru diterapkan: memutar lagu dari
+                        // Home berarti "ganti lagu" DAN "pindah halaman" terjadi di
+                        // frame yang sama. Menyuntik palet baru ke tema tepat saat
+                        // transisi NavHost berjalan membuat layar Now Playing
+                        // tersendat/berosilasi (notes/01 §B7). Transisi layar selesai
+                        // ≤ ~350 ms, jadi tunggu sedikit lebih lama dari itu — ini
+                        // hanya menunda WARNA, bukan pemutaran.
+                        delay(ARTWORK_ACCENT_SETTLE_MS)
                         updateArtworkAccent(appContext, artworkUrl)
                     } else {
                         resetArtworkAccent()
@@ -232,7 +241,6 @@ private val primaryDestinations = listOf(
     Dest("settings", R.string.nav_profile, Icons.Filled.Person, Icons.Outlined.Person),
 )
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun LyreonRoot(
     intentState: androidx.compose.runtime.State<Intent?>,
@@ -416,22 +424,15 @@ fun LyreonRoot(
         }
     }
 
-    SharedTransitionLayout(modifier = Modifier.fillMaxSize().background(LyreonBackground)) {
-        val transitionScope = this
-        // Satu state bersama untuk morph artwork mini player ⇄ Now Playing.
-        val npArtworkState = rememberSharedContentState(key = "now_playing_artwork")
-
+    Box(modifier = Modifier.fillMaxSize().background(LyreonBackground)) {
         val miniPlayer: @Composable () -> Unit = {
             MiniPlayerBar(
                 track = playerState.currentTrack,
                 isPlaying = playerState.isPlaying,
                 isBuffering = playerState.isBuffering,
                 player = player,
-                // Tetap dikomposisi (animasi keluar) saat chrome disembunyikan,
-                // supaya shared transition punya bounds sumber saat Now Playing masuk.
+                // Chrome keluar (slide + fade) saat layar penuh dibuka.
                 visible = !hideChrome,
-                sharedElementScope = transitionScope,
-                sharedContentState = npArtworkState,
                 onToggle = player::toggle,
                 onNext = player::next,
                 onOpen = { navController.navigate("now_playing") },
@@ -553,8 +554,6 @@ fun LyreonRoot(
                         onEnqueueDownload = ::enqueueDownload,
                         onSleepTimerClick = { showSleepTimer = true },
                         playMovement = ::playQueryMovement,
-                        sharedTransitionScope = transitionScope,
-                        npArtworkState = npArtworkState,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -625,7 +624,6 @@ fun LyreonRoot(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun LyreonNavHost(
     navController: NavHostController,
@@ -640,8 +638,6 @@ private fun LyreonNavHost(
     onEnqueueDownload: (LyreonTrack) -> Unit,
     onSleepTimerClick: () -> Unit,
     playMovement: (String) -> Unit,
-    sharedTransitionScope: SharedTransitionScope,
-    npArtworkState: SharedTransitionScope.SharedContentState,
     modifier: Modifier = Modifier,
 ) {
     val player = locator.player
@@ -856,19 +852,8 @@ private fun LyreonNavHost(
 
         composable("now_playing") {
             val current = playerState.currentTrack
-            // Shared bounds dengan artwork mini player (sumber morph saat masuk).
-            val artworkSharedModifier = with(sharedTransitionScope) {
-                Modifier.sharedBounds(
-                    npArtworkState,
-                    animatedVisibilityScope = this@composable,
-                    enter = lyreonSharedEnter(),
-                    exit = lyreonSharedExit(),
-                    boundsTransform = lyreonSharedBoundsTransform(),
-                )
-            }
             NowPlayingScreen(
                 playerState = playerState,
-                artworkSharedModifier = artworkSharedModifier,
                 player = player,
                 videoMode = videoMode,
                 controller = player.mediaController,

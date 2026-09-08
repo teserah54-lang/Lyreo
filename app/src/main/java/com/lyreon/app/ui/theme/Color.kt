@@ -7,7 +7,7 @@ package com.lyreon.app.ui.theme
 
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ReadOnlyComposable
-import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 
 // LYREON — "Hear What Words Can't Say"
@@ -197,8 +197,19 @@ fun lyreonPaletteFromScheme(s: androidx.compose.material3.ColorScheme, accent: C
     )
 }
 
-/** Palette aktif — di-provide oleh LyreonTheme. */
-val LocalLyreonPalette = staticCompositionLocalOf { lyreonDarkPalette() }
+/**
+ * Palette aktif — di-provide oleh LyreonTheme.
+ *
+ * SENGAJA `compositionLocalOf`, bukan `staticCompositionLocalOf`. Material3
+ * memakai versi static untuk skema warnanya karena tema jarang berubah; di
+ * Lyreon palette ikut SAMPUL LAGU (`artworkAccentArgb`), jadi nilainya berubah
+ * setiap ganti lagu. CompositionLocal static memaksa SELURUH pohon di bawah
+ * provider dikomposisi ulang tanpa peduli siapa yang membaca — bila itu terjadi
+ * di tengah transisi NavHost, animasi yang sedang berjalan ikut terguncang
+ * (gejala: halaman Now Playing berosilasi saat dibuka; notes/01 §B7).
+ * Versi non-static hanya menyusun ulang composable yang benar-benar membaca warna.
+ */
+val LocalLyreonPalette = compositionLocalOf { lyreonDarkPalette() }
 
 // ------------------------------------------------------------------
 // Token publik — nama dipertahankan agar semua layar langsung ikut tema

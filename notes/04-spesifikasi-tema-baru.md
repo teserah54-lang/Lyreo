@@ -148,11 +148,15 @@ Sudah: `ui/theme/Motion.kt` (`LocalReduceMotion`, `lyreonSpring`, `lyreonTween`,
 0.85/0.9) + semua animasi yang ada dimigrasikan: `MiniPlayerBar`, `IntroOverlay`
 (dipersingkat jadi 550 ms saat reduce motion), `GenreReelSlider`, `EventCountdown`
 (infinite pulse dimatikan), `LyreonPlayButton`, `Crossfade` lirik di `NowPlayingScreen`.
-**Sudah (2026-09-07, gelombang 8):** shared element artwork — `MainActivity` membungkus
-`LyreonRoot` di `SharedTransitionLayout`; artwork mini player ⇄ Now Playing disambung
-`Modifier.sharedBounds` (kunci `"now_playing_artwork"`), spec morph lewat
-`lyreonSharedBoundsTransform/Enter/Exit` yang menghormati reduce motion. Sumber bounds
-tersedia karena `hideChrome` membuat mini player keluar bersamaan layar Now Playing masuk.
+**Sudah (2026-09-07, gelombang 8) — DICABUT (2026-09-08, gelombang 9):** shared element
+artwork mini player ⇄ Now Playing (`Modifier.sharedBounds`, kunci `"now_playing_artwork"`)
+dihapus karena membuat halaman Now Playing berosilasi tiap kali dibuka
+(raksasa → kecil-kosong → benar → berulang). Rinciannya di `notes/01` §B7. Penggantinya
+"hero-lite": `NowPlayingScreen` menganimasikan kanvas artwork-nya sendiri (skala + pudar
+di fase draw, spec `lyreonSpring`) — tanpa ketergantungan lintas-hierarki. Bila suatu saat
+shared element dicoba lagi, syaratnya: `rememberSharedContentState` dipanggil di TIAP sisi,
+kedua sisi berada di bawah subpohon yang sama, dan tidak ada `graphicsLayer`/`renderEffect`
+(mis. `motionBlurLayer`) di antara `SharedTransitionLayout` dan elemennya.
 Belum: transisi baris lirik aktif (gelombang lirik).
 
 ## 8. Larangan selama pengerjaan tema

@@ -8,6 +8,7 @@ package com.lyreon.app.ui.screens
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -60,6 +61,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -67,6 +69,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
@@ -96,6 +100,7 @@ import com.lyreon.app.ui.theme.LyreonCrimson
 import com.lyreon.app.ui.theme.LyreonRose
 import com.lyreon.app.ui.theme.LyreonTextMuted
 import com.lyreon.app.ui.theme.LyreonMotion
+import com.lyreon.app.ui.theme.lyreonSpring
 import com.lyreon.app.ui.theme.lyreonTween
 import com.lyreon.app.ui.theme.LyreonRadius
 import com.lyreon.app.ui.theme.LyreonScrimSheet
@@ -143,7 +148,6 @@ fun NowPlayingScreen(
     onMoveQueueItem: (Int, Int) -> Unit,
     onSetVideoMode: (Boolean) -> Unit,
     onSeekMs: (Long) -> Unit,
-    artworkSharedModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     val track = playerState.currentTrack
@@ -177,6 +181,26 @@ fun NowPlayingScreen(
     val progress = if (pos.durationMs > 0) {
         pos.positionMs.toFloat() / pos.durationMs.toFloat()
     } else 0f
+
+    // ---- Hero-lite kanvas artwork ----
+    // Dulu artwork ini disambung ke mini player lewat `Modifier.sharedBounds`
+    // lintas-hierarki (mini player hidup di `Scaffold.bottomBar`, layar ini di
+    // dalam NavHost yang dibungkus `graphicsLayer` motion blur). Kombinasi itu
+    // membuat morph macet/berosilasi — lihat notes/01 §B7. Sekarang animasi
+    // masuk dikerjakan SENDIRI oleh layar ini: skala + pudar di fase draw
+    // (`graphicsLayer` tidak mengubah layout, jadi tidak ada elemen yang bisa
+    // "membengkak" ke seluruh layar saat transisi).
+    var heroEntered by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) { heroEntered = true }
+    val heroSpec = lyreonSpring<Float>(
+        dampingRatio = LyreonMotion.dampingCalm,
+        stiffness = LyreonMotion.stiffnessBrisk,
+    )
+    val hero by animateFloatAsState(
+        targetValue = if (heroEntered) 1f else 0f,
+        animationSpec = heroSpec,
+        label = "np_hero",
+    )
 
     BoxWithConstraints(
         modifier = modifier
@@ -320,8 +344,14 @@ fun NowPlayingScreen(
                     positionMs = pos.positionMs,
                     onToggleLyrics = { showLyrics = !showLyrics },
                     onSeekMs = onSeekMs,
-                    sharedModifier = artworkSharedModifier,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            val s = 0.94f + 0.06f * hero
+                            scaleX = s
+                            scaleY = s
+                            alpha = hero
+                        },
                 )
             }
 
@@ -903,17 +933,16 @@ private fun ArtworkOrLyrics(
     positionMs: Long,
     onToggleLyrics: () -> Unit,
     onSeekMs: (Long) -> Unit,
-    sharedModifier: Modifier = Modifier,
     modifier: Modifier = Modifier,
 ) {
     Box(
         modifier = modifier
             // Persegi nyaris 1:1, sedikit lebih tinggi (lebih elegan dari 16:9)
             .aspectRatio(0.94f)
-            // Shared bounds dengan artwork mini player (ukuran berubah → di kiri;
-            // clip yang ikut morph di kanan).
-            .then(sharedModifier)
+            // Clip + clipToBounds: latar lirik yang diblur TIDAK boleh keluar
+            // dari kanvas ini dalam keadaan apa pun (gejala "kotak blur raksasa").
             .clip(RoundedCornerShape(20.dp))
+            .clipToBounds()
             .background(LyreonSurface)
             .clickable(onClick = onToggleLyrics),
     ) {
