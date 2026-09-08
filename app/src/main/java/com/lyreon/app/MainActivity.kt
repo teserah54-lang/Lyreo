@@ -7,6 +7,7 @@ package com.lyreon.app
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.SharedTransitionScope
@@ -142,6 +143,8 @@ import com.lyreon.app.ui.vm.lyreonViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.dropWhile
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -254,6 +257,11 @@ fun LyreonRoot(
     val backStack by navController.currentBackStackEntryAsState()
     val route = backStack?.destination?.route.orEmpty()
 
+    // Switch pembuka/matikan shared-bounds artwork. Dipakai oleh semua pemanggil
+    // navigasi supaya match hanya aktif tepat saat hendak pindah layar, lalu
+    // dimatikan lagi oleh [LaunchedEffect(route)] setelah transisi settle.
+    val artworkSharedEnabled = remember { mutableStateOf(false) }
+
     // ---- Smooth motion blur ----
     // SATU lapis untuk seluruh isi: transisi layar memicunya penuh (14dp sesaat),
     // gulir cepat memicu versi kecilnya (~4dp). Saat diam tidak ada RenderEffect
@@ -326,6 +334,7 @@ fun LyreonRoot(
             intent.getBooleanExtra(MainActivity.EXTRA_OPEN_NOW_PLAYING, false) -> {
                 intent.removeExtra(MainActivity.EXTRA_OPEN_NOW_PLAYING)
                 onConsumeIntent()
+                artworkSharedEnabled.value = true
                 navController.navigate("now_playing")
             }
             intent.getBooleanExtra(MainActivity.EXTRA_OPEN_DOWNLOADS, false) -> {
@@ -339,6 +348,10 @@ fun LyreonRoot(
                 when {
                     url != null && playlistUrl == null -> {
                         onConsumeIntent()
+                        // share URL biasanya berakhir di Now Playing setelah
+                        // resolve stream; nyalakan shared bounds sejak awal supaya
+                        // transisi tetap jalan saat navigasi terjadi.
+                        artworkSharedEnabled.value = true
                         playSharedUrl(locator, url, navController) { msg ->
                             scope.launch { snackbarHostState.showSnackbar(msg) }
                         }
@@ -411,6 +424,7 @@ fun LyreonRoot(
                 snackbarHostState.showSnackbar(context.getString(R.string.snack_no_tracks))
             } else {
                 player.playQueue(tracks, 0)
+                artworkSharedEnabled.value = true
                 navController.navigate("now_playing")
             }
         }
@@ -419,7 +433,39 @@ fun LyreonRoot(
     SharedTransitionLayout(modifier = Modifier.fillMaxSize().background(LyreonBackground)) {
         val transitionScope = this
         // Satu state bersama untuk morph artwork mini player ⇄ Now Playing.
-        val npArtworkState = rememberSharedContentState(key = "now_playing_artwork")
+        //
+        // Shared bounds hanya diaktifkan SAAT transisi layar berjalan. Setelah
+        // transisi selesai (atau lewat timeout), matikan match-nya. Ini mengikuti
+        // peringatan dokumentasi komposisi: elemen shared tetap ada di tree
+        // walau `visible == false`, dan akan MEMULAI transisi lagi setiap kali
+        // ukuran/posisinya berubah selama masih punya active match. Mini player
+        // yang disembunyikan di halaman Now Playing adalah pelakunya: ganti lagu
+        // membuatnya berubah ukuran/posisi, lalu shared bounds di Now Playing
+        // "ikut membesar" lagi. Dengan `SharedContentConfig.isEnabled = false`
+        // setelah transisi selesai, ganti lagu TIDAK lagi memicu re-morph.
+        val artworkSharedConfig = remember(artworkSharedEnabled) {
+            object : SharedTransitionScope.SharedContentConfig {
+                override val SharedTransitionScope.SharedContentState.isEnabled: Boolean
+                    get() = artworkSharedEnabled.value
+            }
+        }
+        val npArtworkState = rememberSharedContentState(
+            key = "now_playing_artwork",
+            config = artworkSharedConfig,
+        )
+
+        // setiap `route` berubah -> aktifkan sebentar, tunggu transisi settle,
+        // lalu matikan kembali. Timeout 1.5 detik juga menjaga rute tanpa
+        // shared-content supaya tidak pernah nyangkut aktif.
+        LaunchedEffect(route) {
+            artworkSharedEnabled.value = true
+            kotlinx.coroutines.withTimeoutOrNull(1_500L) {
+                snapshotFlow { transitionScope.isTransitionActive }
+                    .dropWhile { !it }
+                    .first { !it }
+            }
+            artworkSharedEnabled.value = false
+        }
 
         val miniPlayer: @Composable () -> Unit = {
             MiniPlayerBar(
@@ -434,7 +480,10 @@ fun LyreonRoot(
                 sharedContentState = npArtworkState,
                 onToggle = player::toggle,
                 onNext = player::next,
-                onOpen = { navController.navigate("now_playing") },
+                onOpen = {
+                    artworkSharedEnabled.value = true
+                    navController.navigate("now_playing")
+                },
             )
         }
 
@@ -555,6 +604,9 @@ fun LyreonRoot(
                         playMovement = ::playQueryMovement,
                         sharedTransitionScope = transitionScope,
                         npArtworkState = npArtworkState,
+                        onBeforeSharedNavigation = {
+                            artworkSharedEnabled.value = true
+                        },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -642,9 +694,19 @@ private fun LyreonNavHost(
     playMovement: (String) -> Unit,
     sharedTransitionScope: SharedTransitionScope,
     npArtworkState: SharedTransitionScope.SharedContentState,
+    onBeforeSharedNavigation: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val player = locator.player
+
+    // Semua navigasi di layar disalurkan lewat helper ini supaya shared-bounds
+    // artwork dinyalakan TEPAT SEBELUM route changed. Ini penting: match harus
+    // sudah enabled saat destination baru mulai dikomposisi, bukan menunggu
+    // LaunchedEffect(route) yang baru berjalan setelah transisi dimulai.
+    fun navigateShared(block: () -> Unit) {
+        onBeforeSharedNavigation()
+        block()
+    }
 
     // Transisi antar-layar: geser kecil + pudar (spring tenang), dipasangkan
     // dengan motion blur di LyreonRoot. Sebelumnya semua transisi None sehingga
@@ -665,20 +727,24 @@ private fun LyreonNavHost(
                 playerState = playerState,
                 onPlayQueue = { tracks, index -> player.playQueue(tracks, index) },
                 onTogglePlay = player::toggle,
-                onOpenTrack = { navController.navigate("now_playing") },
+                onOpenTrack = { navigateShared { navController.navigate("now_playing") } },
                 onTrackMore = onMore,
                 onLike = onLike,
                 likedIds = likedIds,
                 downloadedIds = downloadedIds,
-                onOpenEditorial = { navController.navigate("editorial/${it.id}") },
+                onOpenEditorial = { navigateShared { navController.navigate("editorial/${it.id}") } },
                 onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    navigateShared {
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    }
                 },
                 onSearchClick = {
-                    navController.navigate("search") {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
+                    navigateShared {
+                        navController.navigate("search") {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
                     }
                 },
             )
@@ -694,10 +760,12 @@ private fun LyreonNavHost(
                 onLike = onLike,
                 onOpenYtPlaylist = { pl: YtPlaylist ->
                     val encoded = Uri.encode(pl.url)
-                    navController.navigate("ytplaylist/$encoded")
+                    navigateShared { navController.navigate("ytplaylist/$encoded") }
                 },
                 onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    navigateShared {
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    }
                 },
                 likedIds = likedIds,
                 downloadedIds = downloadedIds,
@@ -713,7 +781,9 @@ private fun LyreonNavHost(
                 onTrackMore = onMore,
                 onLike = onLike,
                 onOpenPlaylist = { id, name ->
-                    navController.navigate("playlist/$id?name=${Uri.encode(name)}")
+                    navigateShared {
+                        navController.navigate("playlist/$id?name=${Uri.encode(name)}")
+                    }
                 },
                 likedIds = likedIds,
                 downloadedIds = downloadedIds,
@@ -730,7 +800,9 @@ private fun LyreonNavHost(
                 onTrackMore = onMore,
                 onLike = onLike,
                 onOpenPlaylist = { id, name ->
-                    navController.navigate("playlist/$id?name=${Uri.encode(name)}")
+                    navigateShared {
+                        navController.navigate("playlist/$id?name=${Uri.encode(name)}")
+                    }
                 },
                 likedIds = likedIds,
                 downloadedIds = downloadedIds,
@@ -740,9 +812,13 @@ private fun LyreonNavHost(
         composable("archive") {
             ArchiveScreen(
                 playerState = playerState,
-                onOpenEditorial = { navController.navigate("editorial/${it.id}") },
+                onOpenEditorial = {
+                    navigateShared { navController.navigate("editorial/${it.id}") }
+                },
                 onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    navigateShared {
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    }
                 },
                 onPlayMovement = { playMovement(it.searchQuery) },
             )
@@ -762,7 +838,11 @@ private fun LyreonNavHost(
             val vm: SettingsViewModel = lyreonViewModel { SettingsViewModel(it) }
             SettingsScreen(
                 vm = vm,
-                onOpenLicenses = { navController.navigate("licenses") { launchSingleTop = true } },
+                onOpenLicenses = {
+                    navigateShared {
+                        navController.navigate("licenses") { launchSingleTop = true }
+                    }
+                },
             )
         }
 
@@ -791,17 +871,21 @@ private fun LyreonNavHost(
                 onLike = onLike,
                 onTrackMore = onMore,
                 onOpenBrowse = { id, name ->
-                    navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    navigateShared {
+                        navController.navigate("browse/$id?title=${Uri.encode(name)}")
+                    }
                 },
                 onOpenPlaylist = { playlistId ->
                     val url = "https://music.youtube.com/playlist?list=$playlistId"
-                    navController.navigate("ytplaylist/${Uri.encode(url)}")
+                    navigateShared {
+                        navController.navigate("ytplaylist/${Uri.encode(url)}")
+                    }
                 },
                 // Radio artis: benih lagu teratas halaman, antrean langsung diisi
                 // lagu terkait oleh PlayerManager.startRadio.
                 onStartRadio = { seed ->
                     player.startRadio(seed)
-                    navController.navigate("now_playing")
+                    navigateShared { navController.navigate("now_playing") }
                 },
             )
         }
