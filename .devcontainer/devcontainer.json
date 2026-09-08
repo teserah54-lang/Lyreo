@@ -1,0 +1,21 @@
+{
+  "name": "Lyreon · Android (JDK 17 + SDK 36)",
+  "image": "mcr.microsoft.com/devcontainers/java:1-21-bookworm",
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "fwcd.kotlin",
+        "redhat.java"
+      ]
+    }
+  },
+  "postCreateCommand": "bash .devcontainer/setup-android-sdk.sh",
+  "remoteEnv": {
+    "ANDROID_HOME": "/workspaces/android-sdk",
+    "ANDROID_SDK_ROOT": "/workspaces/android-sdk",
+    "PATH": "${containerEnv:PATH}:/workspaces/android-sdk/platform-tools:/workspaces/android-sdk/cmdline-tools/latest/bin"
+  }
+}

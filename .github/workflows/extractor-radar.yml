@@ -1,0 +1,176 @@
+name: Extractor Radar
+
+# ⚠️ BERKAS INI BELUM AKTIF. GitHub App yang dipakai sesi ini tidak punya izin
+# `workflows`, sehingga berkas tidak boleh diletakkan di .github/workflows/.
+# Untuk mengaktifkan, salin berkas ini ke:
+#
+#     .github/workflows/extractor-radar.yml
+#
+# (commit dari akun dengan izin workflows, atau lewat UI GitHub). Setelah itu
+# workflow berjalan tiap Senin 02:17 UTC dan bisa dipicu manual.
+
+# Radar dependency extractor.
+#
+# Masalah yang dicegah: "patch sekali lalu lupa". Kegagalan stream Lyreon hampir
+# selalu berawal dari pin extractor yang tertinggal dari upstream (YouTube
+# mengubah kebijakan klien → fork mengeluarkan perbaikan → pin kita tidak ikut).
+# Workflow ini membandingkan pin di app/build.gradle.kts dengan HEAD fork tiap
+# minggu, dan membuka issue berisi daftar commit yang terlewat bila tertinggal.
+
+on:
+  schedule:
+    - cron: "17 2 * * 1" # Senin 02:17 UTC
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: "Repo extractor yang dibandingkan"
+        required: false
+        default: "MetrolistGroup/MetrolistExtractor"
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Bandingkan pin dengan HEAD upstream
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          UPSTREAM: ${{ github.event.inputs.repo || 'MetrolistGroup/MetrolistExtractor' }}
+        run: |
+          set -euo pipefail
+
+          PINNED=$(grep -oE "MetrolistExtractor:[0-9a-f]{40}" app/build.gradle.kts \
+            | head -1 | cut -d: -f2 || true)
+
+          {
+            echo "# Extractor Radar"
+            echo ""
+            echo "- Upstream: \`${UPSTREAM}\`"
+            echo "- Pin di \`app/build.gradle.kts\`: \`${PINNED:-<tidak ditemukan>}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ -z "${PINNED}" ]; then
+            echo ""
+            echo "**Pin tidak terbaca.** Format yang diharapkan:"
+            echo "\`implementation(\"com.github.MetrolistGroup:MetrolistExtractor:<40-hex>\")\`"
+            exit 1
+          fi
+
+          HEAD_SHA=$(gh api "repos/${UPSTREAM}/commits?per_page=1" --jq '.[0].sha')
+          HEAD_DATE=$(gh api "repos/${UPSTREAM}/commits/${HEAD_SHA}" --jq '.commit.author.date')
+
+          echo "- HEAD upstream: \`${HEAD_SHA}\` (${HEAD_DATE})" >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$HEAD_SHA" = "$PINNED" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "✅ Pin = HEAD upstream. Tidak ada yang tertinggal." >> "$GITHUB_STEP_SUMMARY"
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          COMPARE=$(gh api "repos/${UPSTREAM}/compare/${PINNED}...${HEAD_SHA}" || true)
+          if [ -z "$COMPARE" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "⚠️ Perbandingan gagal (API menolak, atau pin tidak ada di riwayat upstream — misalnya pin sudah di-force-push)." >> "$GITHUB_STEP_SUMMARY"
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          AHEAD=$(printf '%s' "$COMPARE" | jq -r '.ahead_by // 0')
+          BEHIND=$(printf '%s' "$COMPARE" | jq -r '.behind_by // 0')
+
+          # Daftar commit ditulis ke berkas dulu: `jq | head` langsung bisa
+          # memicu SIGPIPE (exit 141) yang dengan pipefail dianggap kegagalan.
+          printf '%s' "$COMPARE" \
+            | jq -r '.commits[]? | "- `\(.sha[0:9])` \(.commit.author.date[0:10]) — \(.commit.message | split("\n")[0])"' \
+            > commits-all.txt || true
+          head -30 commits-all.txt > commits.txt || true
+          head -40 commits-all.txt > commits-issue.txt || true
+
+          if [ "${AHEAD}" = "0" ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "ℹ️ HEAD upstream bukan keturunan dari pin (ahead_by=0, behind_by=${BEHIND}) — pin mungkin berada di branch lain. Tidak ada issue yang dibuka." >> "$GITHUB_STEP_SUMMARY"
+            echo "drifted=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "⚠️ Pin tertinggal **${AHEAD} commit** (behind_by=${BEHIND})." >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          cat commits.txt >> "$GITHUB_STEP_SUMMARY"
+
+          {
+            echo "Pin extractor di \`app/build.gradle.kts\` tertinggal **${AHEAD} commit** dari HEAD \`${UPSTREAM}\`."
+            echo ""
+            echo "- Pin sekarang: \`${PINNED}\`"
+            echo "- HEAD upstream: \`${HEAD_SHA}\` (${HEAD_DATE})"
+            echo ""
+            echo "### Commit yang terlewat (maks. 40)"
+            cat commits-issue.txt
+            echo ""
+            echo "### Kenapa ini penting"
+            echo "Kegagalan stream Lyreon (SABR-only, klien ditutup YouTube) hampir selalu"
+            echo "diperbaiki lebih dulu di upstream. Lihat \`docs/streaming-resilience.md\`"
+            echo "§5 (runbook) dan §7 (kebijakan pin)."
+            echo ""
+            echo "### Sebelum menaikkan pin"
+            echo "1. Baca commit di atas — apakah ada perubahan API yang dipakai Lyreon"
+            echo "   (\`ServiceList.YouTube.setTokens\`, \`setLoadingTimeout\`, \`setFetchDislike\`,"
+            echo "   konstruktor \`Response\` 6 argumen, \`executeAsync\`)?"
+            echo "2. Jalankan \`./gradlew :app:assembleDebug\`."
+            echo "3. Uji **Settings → Kesehatan Stream → Tes koneksi** dan putar beberapa lagu."
+            echo "4. Catat tanggal + alasannya di tabel riwayat \`docs/streaming-resilience.md\`."
+          } > issue-body.md
+
+          echo "drifted=true" >> "$GITHUB_OUTPUT"
+          echo "ahead=${AHEAD}" >> "$GITHUB_OUTPUT"
+          echo "head=${HEAD_SHA}" >> "$GITHUB_OUTPUT"
+          echo "pinned=${PINNED}" >> "$GITHUB_OUTPUT"
+
+      - name: Buka issue bila tertinggal
+        if: steps.check.outputs.drifted == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          gh label create "extractor-drift" \
+            --color "D93F0B" \
+            --description "Pin extractor tertinggal dari upstream" >/dev/null 2>&1 || true
+
+          OPEN_ISSUE=$(gh issue list --label extractor-drift --state open --json number --jq '.[0].number // ""')
+
+          if [ -n "$OPEN_ISSUE" ]; then
+            echo "Issue #$OPEN_ISSUE masih terbuka — menambahkan komentar pembaruan."
+            gh issue comment "$OPEN_ISSUE" --body-file issue-body.md
+          else
+            gh issue create \
+              --title "Extractor tertinggal ${steps.check.outputs.ahead} commit dari upstream (${{ steps.check.outputs.head }})" \
+              --label extractor-drift \
+              --body-file issue-body.md
+          fi
+
+      # Catatan terpisah: rilis extractor lain di ekosistem, sebagai pembanding
+      # strategis (mis. kapan SABR native layak diadopsi — lihat docs §6.3).
+      - name: Cek ekosistem (advisory)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set +e
+          {
+            echo ""
+            echo "## Advisory: ekosistem extractor"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          for REPO in InfinityLoop1308/PipePipeExtractor TeamNewPipe/NewPipeExtractor; do
+            TAG=$(gh api "repos/${REPO}/tags?per_page=1" --jq '.[0].name' 2>/dev/null)
+            PUSHED=$(gh api "repos/${REPO}" --jq '.pushed_at' 2>/dev/null)
+            echo "- \`${REPO}\`: tag \`${TAG:-?}\` · push terakhir \`${PUSHED:-?}\`" >> "$GITHUB_STEP_SUMMARY"
+          done

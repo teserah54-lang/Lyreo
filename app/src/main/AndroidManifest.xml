@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- Streaming & unduhan -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Background playback / foreground services (Android 9-16) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
+    <!-- Notifikasi media & unduhan (Android 13+) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- Baca musik lokal dari penyimpanan (mp3/m4a/ogg/…):
+         Android 13+ pakai izin media granular; ≤12 pakai izin storage lama -->
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <application
+        android:name=".LyreonApp"
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:icon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:localeConfig="@xml/locale_config"
+        tools:targetApi="36">
+
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+            <!-- Terima link YouTube dari aplikasi lain -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="www.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="m.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="music.youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="youtube.com" android:pathPrefix="/watch" />
+                <data android:scheme="https" android:host="youtu.be" />
+                <data android:scheme="http" android:host="youtu.be" />
+            </intent-filter>
+        </activity>
+
+        <!-- Background playback: Media3 MediaSessionService -->
+        <service
+            android:name=".player.PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <!-- Widget pemutar di home screen -->
+        <receiver
+            android:name=".widget.PlayerWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/widget_info" />
+        </receiver>
+
+        <!-- Media button / playback resumption -->
+        <receiver
+            android:name="androidx.media3.session.MediaButtonReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Layanan unduhan offline -->
+        <service
+            android:name=".download.DownloadService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+    </application>
+
+</manifest>

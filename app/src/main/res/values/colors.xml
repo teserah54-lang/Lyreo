@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Warna widget home screen. RemoteViews tidak bisa membaca token Compose,
+         jadi nilai permukaan/garis rambut tema (lihat ui/theme) disalin di sini
+         agar widget tetap serasi dengan aplikasi. -->
+    <color name="widget_surface">#F2121214</color>
+    <color name="widget_hairline">#22FFFFFF</color>
+    <color name="widget_art_placeholder">#33FFFFFF</color>
+    <color name="widget_text_primary">#FFFFFFFF</color>
+    <color name="widget_text_secondary">#B3FFFFFF</color>
+</resources>

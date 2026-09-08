@@ -1,0 +1,391 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Lyreon</string>
+    <string name="tagline">Hear What Words Can\'t Say</string>
+    <string name="downloads_channel">Unduhan</string>
+    <string name="downloads_channel_desc">Progres unduhan musik offline</string>
+
+    <!-- Navigasi -->
+    <string name="nav_home">Home</string>
+    <string name="nav_explore">Explore</string>
+    <string name="nav_library">Library</string>
+    <string name="nav_playlist">Playlist</string>
+    <string name="nav_profile">Profil</string>
+
+    <!-- Aksi umum -->
+    <string name="action_cancel">BATAL</string>
+    <string name="action_delete">HAPUS</string>
+    <string name="action_create">BUAT</string>
+    <string name="action_close">TUTUP</string>
+    <string name="common_play">Putar</string>
+    <string name="common_playing">Main</string>
+    <string name="common_youtube">YouTube</string>
+    <string name="common_youtube_music">YouTube Music</string>
+    <string name="common_offline">OFFLINE</string>
+    <string name="common_playlist_caps">PLAYLIST</string>
+    <string name="common_shuffle">Acak</string>
+
+    <!-- Home -->
+    <string name="greeting_morning">Selamat pagi,</string>
+    <string name="greeting_noon">Selamat siang,</string>
+    <string name="greeting_afternoon">Selamat sore,</string>
+    <string name="greeting_evening">Selamat malam,</string>
+    <string name="home_quote">Hear what words can\'t say.</string>
+    <string name="home_preparing">Menyiapkan musik…</string>
+    <string name="home_loading">Memuat…</string>
+    <string name="home_history">Baru Diputar</string>
+    <string name="home_picks_personal">Pilihan Untukmu</string>
+    <string name="home_picks_popular">Sedang Populer</string>
+    <string name="home_genres">Jelajahi Suasana</string>
+    <string name="home_genre_for_you">%1$s Untukmu</string>
+    <string name="home_featured">Featured Untukmu</string>
+    <string name="home_feed_error">Tidak bisa memuat feed. Periksa koneksi.</string>
+    <string name="genre_header">Suasana</string>
+    <string name="genre_sub">Pilih mood-mu</string>
+    <string name="genre_count">%1$d genre</string>
+
+    <!-- Library -->
+    <string name="library_kicker">Pustaka</string>
+    <string name="library_title">Musik\nKoleksimu</string>
+    <string name="library_stats">%1$d favorit  ·  %2$d playlist  ·  %3$d riwayat  ·  %4$d offline</string>
+    <string name="tab_favorite">FAVORIT</string>
+    <string name="tab_playlist">PLAYLIST</string>
+    <string name="tab_history">RIWAYAT</string>
+    <string name="tab_offline">OFFLINE</string>
+    <string name="library_fav_empty_title">Belum ada favorit.</string>
+    <string name="library_fav_empty_body">Ketuk tombol suka di lagu mana pun - tersimpan selamanya di perangkat ini.</string>
+    <string name="library_play_all_fav">PUTAR SEMUA FAVORIT</string>
+    <string name="library_new_playlist">Playlist Baru</string>
+    <string name="library_pl_empty_title">Belum ada playlist.</string>
+    <string name="library_pl_empty_body">Buat kurasi sendiri - tambahkan lagu dari pencarian, home, atau pemutar.</string>
+    <string name="playlist_track_count">%1$d lagu</string>
+    <string name="history_empty_title">Riwayat kosong.</string>
+    <string name="history_empty_body">Apa pun yang kamu putar akan tercatat di sini.</string>
+    <string name="history_replay">PUTAR ULANG RIWAYAT</string>
+    <string name="history_clear">BERSIHKAN</string>
+    <string name="offline_storage">Penyimpanan Offline</string>
+    <string name="offline_summary">%1$d lagu siap offline  ·  %2$d sedang diproses</string>
+    <string name="offline_play_mode">Putar mode offline</string>
+    <string name="offline_queue_hint">ANTREAN UNDUHAN · LIHAT MENU DOWNLOADS</string>
+    <string name="delete_playlist_title">HAPUS PLAYLIST?</string>
+    <string name="delete_playlist_body">\"%1$s\" dan isinya akan dihapus permanen.</string>
+    <string name="new_playlist_title">PLAYLIST BARU</string>
+    <string name="new_playlist_hint">Nama playlist…</string>
+    <string name="playlist_created">Playlist \"%1$s\" dibuat.</string>
+    <string name="library_import_playlist">Impor playlist (m3u/pls)</string>
+    <string name="library_importing">Mengimpor…</string>
+    <string name="import_playlist_done">PLAYLIST DIIMPOR</string>
+    <string name="import_playlist_summary">\"%1$s\" dibuat dengan %2$d lagu. %3$d baris dilewati.</string>
+    <string name="import_playlist_failed_title">GAGAL MENGIMPOR</string>
+    <string name="import_playlist_failed_body">Berkas tidak bisa dibaca atau tidak berisi lagu yang dikenali.</string>
+
+    <!-- Search / Explore -->
+    <string name="search_kicker">Explorer</string>
+    <string name="search_title">Cari lagu\nfavoritmu</string>
+    <string name="search_hint">Lagu, artis, album…</string>
+    <string name="search_intro">Jelajahi jutaan lagu. Ketik judul, artis, atau album - Lyreon memutar audio saja, hemat kuota.</string>
+    <string name="search_suggest">SARAN</string>
+    <string name="search_results">HASIL · %1$d+</string>
+    <string name="search_local">DI PERANGKAT · %1$d</string>
+    <string name="search_no_results">TIDAK ADA HASIL</string>
+    <string name="search_no_results_body">Coba kata kunci lain atau ganti filter.</string>
+    <string name="search_loading">Mencari di YouTube…</string>
+    <string name="search_load_more">MUAT LEBIH BANYAK</string>
+    <string name="search_failed">Pencarian gagal: %1$s</string>
+    <string name="filter_all">SEMUA</string>
+    <string name="filter_songs">LAGU</string>
+    <string name="filter_videos">VIDEO</string>
+    <string name="filter_albums">ALBUM</string>
+    <string name="filter_playlists">PLAYLIST</string>
+    <string name="filter_podcasts">PODCAST</string>
+    <string name="filter_artists">ARTIS</string>
+    <string name="home_artist_kicker">Artis Terkait</string>
+    <string name="action_add_to_queue">Tambah ke antrean</string>
+    <string name="history_title">Riwayat</string>
+    <string name="radio_hint">Radio otomatis aktif · lagu berlanjut</string>
+    <string name="podcast_section">Podcast &amp; Talkshow</string>
+    <string name="podcast_intro">Dengarkan episode podcast favoritmu - audio saja, bisa sambil layar mati.</string>
+
+    <!-- Now Playing -->
+    <string name="np_kicker">SEDANG DIPUTAR</string>
+    <string name="np_loading_stream">MEMUAT STREAM…</string>
+    <string name="np_audio_only">AUDIO ONLY · YOUTUBE</string>
+    <string name="np_empty_title">Belum ada yang diputar</string>
+    <string name="np_empty_body">Kembali ke Home atau Explore untuk memilih lagu.</string>
+    <string name="np_audio_queue">Audio saja  ·  Antrean %1$d/%2$d</string>
+    <string name="np_previous">Sebelumnya</string>
+    <string name="np_next">Berikutnya</string>
+    <string name="np_repeat">Ulangi</string>
+    <string name="np_download">UNDUH</string>
+    <string name="np_timer">TIMER</string>
+    <string name="np_queue">ANTREAN</string>
+    <string name="np_lyrics">LIRIK</string>
+    <string name="np_music">MUSIK</string>
+    <string name="np_video">VIDEO</string>
+    <string name="np_timer_left">%1$dM</string>
+    <string name="np_share">Bagikan</string>
+    <string name="np_like_add">Sukai</string>
+    <string name="np_like_remove">Hapus dari favorit</string>
+    <string name="queue_title">Antrean · %1$d</string>
+    <string name="queue_remove">Hapus dari antrean</string>
+    <string name="queue_removed_fmt">Dihapus dari antrean: %1$s</string>
+    <string name="queue_undo">Urungkan</string>
+    <string name="queue_drag_handle">Seret untuk mengurutkan</string>
+    <string name="share_chooser">Bagikan lagu</string>
+    <string name="video_loading">Menyiapkan video…</string>
+    <string name="video_unavailable">Video tidak tersedia - kembali ke mode audio.</string>
+
+    <!-- Lirik -->
+    <string name="lyrics_title">Lirik</string>
+    <string name="lyrics_loading">Mencari lirik…</string>
+    <string name="lyrics_none">Lirik tidak ditemukan untuk lagu ini.</string>
+    <string name="lyrics_error">Gagal memuat lirik - periksa koneksi.</string>
+    <string name="lyrics_instrumental">Instrumental - tidak ada lirik.</string>
+    <string name="lyrics_source">Lirik oleh LRCLIB</string>
+    <string name="lyrics_source_fmt">Lirik oleh %1$s</string>
+    <string name="lyrics_offset_minus">Mundurkan lirik 0,5 detik</string>
+    <string name="lyrics_offset_plus">Majukan lirik 0,5 detik</string>
+    <string name="lyrics_offset_value">%1$.1f dtk</string>
+    <string name="lyrics_offset_reset">Setel ulang</string>
+    <string name="kugou_title">Sumber lirik KuGou</string>
+    <string name="kugou_body">Coba KuGou bila LRCLIB tidak menemukan lirik - cakupan lebih luas, terutama lagu Asia.</string>
+
+    <!-- Aksi lagu (sheet) -->
+    <string name="act_play_next">PUTAR SETELAH INI</string>
+    <string name="act_add_queue">TAMBAH KE ANTREAN</string>
+    <string name="act_save_playlist">SIMPAN KE PLAYLIST</string>
+    <string name="act_download">UNDUH (OFFLINE)</string>
+    <string name="act_like_add">TAMBAH KE FAVORIT</string>
+    <string name="act_like_remove">HAPUS DARI FAVORIT</string>
+    <string name="act_share">BAGIKAN TAUTAN</string>
+    <string name="a2p_create_hint">Playlist baru…</string>
+    <string name="a2p_create_save">BUAT &amp; SIMPAN</string>
+
+    <!-- Sleep timer -->
+    <string name="sleep_title">SLEEP TIMER</string>
+    <string name="sleep_minutes">%1$d MENIT</string>
+    <string name="sleep_active">Aktif - sekitar %1$d menit tersisa.</string>
+    <string name="sleep_off">MATIKAN</string>
+
+    <!-- Settings / Profil -->
+    <string name="settings_kicker">Profil</string>
+    <string name="settings_title">Atur\nRitmemu</string>
+    <string name="sec_appearance">TAMPILAN</string>
+    <string name="sec_audio">AUDIO</string>
+    <string name="sec_playback">PEMUTARAN</string>
+    <string name="sec_data">DATA</string>
+    <string name="sec_about">TENTANG</string>
+    <string name="sec_language">BAHASA</string>
+    <string name="theme_label">Tema tampilan</string>
+    <string name="theme_dark">GELAP</string>
+    <string name="theme_light">KERTAS</string>
+    <string name="theme_system">SISTEM</string>
+    <string name="theme_black">HITAM</string>
+    <string name="dynamic_title">Warna dinamis (Material You)</string>
+    <string name="dynamic_body">Ambil palet dari wallpaper (Android 12+). Warna aksen kustom diabaikan saat opsi ini aktif.</string>
+    <string name="quality_label">Kualitas stream (audio-only)</string>
+    <string name="quality_body">Berlaku untuk streaming &amp; unduhan. Terbaik ≈ 160+ kbps Opus/M4A.</string>
+    <string name="quality_high">TERBAIK</string>
+    <string name="quality_balanced">SEIMBANG</string>
+    <string name="quality_saver">HEMAT</string>
+    <string name="autoplay_title">Radio otomatis</string>
+    <string name="autoplay_body">Saat antrean habis, lanjutkan dengan lagu-lagu terkait dari YouTube.</string>
+    <string name="reduce_title">Reduce motion</string>
+    <string name="reduce_body">Kurangi animasi untuk perangkat kelas menengah ke bawah.</string>
+    <string name="common_close">Tutup</string>
+    <string name="np_speed">KECEPATAN</string>
+    <string name="np_speed_active_fmt">%1$.2f×</string>
+    <string name="speed_dialog_title">Kecepatan &amp; nada</string>
+    <string name="speed_label">Kecepatan putar</string>
+    <string name="speed_value_fmt">%1$.2f×</string>
+    <string name="pitch_label">Geser nada (pitch)</string>
+    <string name="pitch_value_fmt">%1$+d semitone</string>
+    <string name="speed_reset">Kembalikan normal</string>
+    <string name="skip_silence_title">Lewati keheningan</string>
+    <string name="skip_silence_body">Buang bagian sunyi (jeda panjang, intro kosong) dari audio yang diputar.</string>
+    <string name="skip_silence_instant_title">Lompat hening (agresif)</string>
+    <string name="skip_silence_instant_body">Bila sunyi lebih dari 2 detik masih terdengar, lompat 15 detik ke depan. Butuh opsi di atas aktif.</string>
+    <string name="normalize_title">Samakan volume lagu</string>
+    <string name="normalize_body">Naik-turunkan volume otomatis memakai data loudness YouTube agar semua lagu terdengar setara (maks +3 dB).</string>
+    <string name="licenses_title">Lisensi sumber terbuka</string>
+    <string name="licenses_app_heading">Lyreon - GPL-3.0-only</string>
+    <string name="licenses_app_body">Lyreon didistribusikan di bawah GNU General Public License versi 3 saja (GPL-3.0-only). Kode sumber lengkap, termasuk riwayat perubahan, tersedia di repositori proyek. Anda bebas memakai, mempelajari, mengubah, dan membagikan ulang aplikasi ini dengan lisensi yang sama.</string>
+    <string name="licenses_sec_libraries">Pustaka pihak ketiga</string>
+    <string name="licenses_sec_assets">Ikon &amp; font</string>
+    <string name="licenses_sec_ported">Kode yang diporting (GPL-3.0)</string>
+    <string name="licenses_notice_heading">Pemberitahuan Apache-2.0</string>
+    <string name="licenses_notice_body">Sebagian pustaka di atas dilisensikan Apache License 2.0 dan didistribusikan apa adanya, TANPA JAMINAN APAPUN. Salinan lengkap lisensi tersedia di https://www.apache.org/licenses/LICENSE-2.0. Hak cipta masing-masing pustaka tetap milik pemiliknya.</string>
+    <string name="widget_label">Lyreon Pemutar</string>
+    <string name="widget_description">Kendalikan pemutaran Lyreon langsung dari layar utama.</string>
+    <string name="widget_empty_title">Tidak ada yang diputar</string>
+    <string name="widget_play_pause">Putar atau jeda</string>
+    <string name="browse_kicker">JELAJAH</string>
+    <string name="browse_empty_title">Halaman ini kosong</string>
+    <string name="browse_empty_body">YouTube tidak mengembalikan rak apa pun untuk halaman ini. Coba lagi beberapa saat.</string>
+    <string name="browse_genres_title">Genre &amp; Mood</string>
+    <string name="browse_genres_body">Jelajahi rak resmi YouTube Music per genre dan suasana - dipetakan langsung dari InnerTube.</string>
+    <string name="language_label">Bahasa aplikasi</string>
+    <string name="clear_history_title">Bersihkan riwayat dengar</string>
+    <string name="clear_history_body">Menghapus catatan Recently Played (favorit &amp; playlist tetap aman).</string>
+    <string name="clear_history_confirm">BERSIHKAN RIWAYAT?</string>
+    <string name="clear_history_confirm_body">Semua catatan Recently Played dihapus.</string>
+    <string name="clear_history_yes">YA, HAPUS</string>
+    <string name="about_version">LYREON - v%1$s</string>
+    <string name="about_version_beta">LYREON - v%1$s (Beta)</string>
+    <string name="about_body">Hear What Words Can\'t Say. Musik adalah bahasa jiwa - seluruh katalog YouTube dalam audio berkualitas, diputar di latar belakang, bisa offline, tanpa iklan.</string>
+    <string name="about_engine">Mesin: Media3 ExoPlayer · MetrolistExtractor + InnerTube fallback · LRCLIB · Room · OkHttp · Coil</string>
+
+    <!-- Catatan pembaruan Beta -->
+    <string name="sec_beta_notes">CATATAN RILIS BETA</string>
+    <string name="beta_notes_badge">BETA</string>
+    <string name="beta_notes_title">Yang baru di 3.5.0 (Beta)</string>
+    <string name="beta_notes_body">Rilis percobaan. Beberapa hal mungkin masih belum stabil - maklum kalau ada yang janggal, dan bantu laporkan ya.</string>
+    <string name="beta_note_1">- Jalur stream cadangan (fallback) langsung ke YouTube saat ekstraktor utama gagal - lagu &amp; pencarian tetap jalan.</string>
+    <string name="beta_note_2">- Thumbnail kanal artis lebih tajam di Beranda &amp; halaman pemutar.</string>
+    <string name="beta_note_3">- Antrean otomatis diperpanjang lebih awal &amp; lebih mulus (radio tanpa henti).</string>
+    <string name="beta_note_4">- Pembersihan izin &amp; penyiapan penandatanganan untuk instalasi yang lebih bersih.</string>
+    <string name="beta_note_5">- Pencarian, playlist, dan stream memakai cadangan InnerTube bila ekstraktor utama terganggu.</string>
+    <string name="about_website">WEBSITE PENGEMBANG</string>
+    <string name="about_donate">DUKUNG PENGEMBANG - DONASI</string>
+    <string name="about_legal">CATATAN: Lyreon adalah klien pihak ketiga yang tidak berafiliasi dengan YouTube/Google. Streaming hanya untuk penggunaan pribadi sesuai ketentuan layanan penyedia konten.</string>
+
+    <!-- Donasi -->
+    <string name="donate_title">Dukung Lyreon</string>
+    <string name="donate_body">Mari bantu pengembang aplikasi ini dengan berdonasi di saweria.co/riznotdev agar aplikasi ini terus berkembang, lebih baik, dan berguna untuk semua orang.</string>
+    <string name="donate_yes">Donasi Sekarang</string>
+    <string name="donate_later">Nanti Saja</string>
+
+    <!-- Snackbar & notifikasi -->
+    <string name="snack_download_queue">Dalam antrean unduh: %1$s</string>
+    <string name="snack_saved_playlist">Tersimpan di playlist.</string>
+    <string name="snack_opening_link">Membuka tautan YouTube…</string>
+    <string name="snack_link_failed">Gagal membuka tautan.</string>
+    <string name="snack_no_tracks">Tidak ada lagu ditemukan - periksa koneksi lalu coba lagi.</string>
+    <string name="notif_loading_playlist">MEMBUKA PLAYLIST…</string>
+
+    <!-- Unduhan -->
+    <string name="downloads_title">Musik Offline</string>
+    <string name="downloads_empty">Belum ada unduhan.</string>
+    <string name="downloads_failed">GAGAL MEMUAT</string>
+    <string name="a2p_empty">Belum ada playlist. Buat yang pertama di bawah.</string>
+    <string name="action_back">Kembali</string>
+    <string name="action_save">SIMPAN</string>
+    <string name="action_rename">UBAH NAMA</string>
+    <string name="action_retry">COBA LAGI</string>
+    <string name="move_up">Naik</string>
+    <string name="move_down">Turun</string>
+    <string name="remove_from_playlist">Hapus dari playlist</string>
+    <string name="editorial_kicker">Kurasi Editorial</string>
+    <string name="editorial_play">Mainkan Sekarang</string>
+    <string name="yt_playlist_title">YOUTUBE PLAYLIST</string>
+    <string name="dl_queued">DALAM ANTREAN</string>
+    <string name="dl_canceled">DIBATALKAN</string>
+    <string name="play_count">PUTAR (%1$d)</string>
+    <string name="podcast_badge">PODCAST</string>
+    <string name="dl_kicker">DOWNLOADS</string>
+    <string name="dl_play_all_offline">PUTAR SEMUA OFFLINE (%1$d)</string>
+    <string name="dl_storage_note">Lagu offline tersimpan di penyimpanan app (Android/data) - awet selama app terpasang.</string>
+    <string name="dl_downloading">MENGUNDUH…</string>
+    <string name="pl_empty_title">Playlist kosong.</string>
+    <string name="pl_empty_body">Tambahkan lagu lewat menu Lainnya, lalu pilih SIMPAN KE PLAYLIST di mana pun.</string>
+    <string name="editorial_note">Kurasi ini diterjemahkan Lyreon menjadi pilihan lagu YouTube Music - hasilnya segar setiap kali diputar.</string>
+
+    <!-- Musik lokal (file di penyimpanan perangkat) -->
+    <string name="tab_local">LOKAL</string>
+    <string name="np_local_file">FILE LOKAL · PERANGKAT</string>
+    <string name="local_permission_title">Musik dari HP-mu</string>
+    <string name="local_permission_body">Izinkan Lyreon membaca file musik (mp3, m4a, ogg…) yang tersimpan di HP-mu. Semuanya tetap di perangkat - tidak diunggah ke mana pun.</string>
+    <string name="local_permission_button">Izinkan akses musik</string>
+    <string name="local_scanning">Memindai file musik…</string>
+    <string name="local_empty_title">Belum ada musik lokal.</string>
+    <string name="local_empty_body">File musikmu mungkin ada di folder yang tidak diindeks Android (umum terjadi di folder WhatsApp/Telegram). Ketuk tombol di bawah (atau ikon folder di atas) untuk memilih folder musikmu langsung.</string>
+    <string name="local_play_all">PUTAR SEMUA · %1$d LAGU</string>
+    <string name="local_rescan">Pindai ulang</string>
+    <string name="local_add_folder">Pilih folder musik</string>
+    <string name="local_remove_folder">Hapus folder</string>
+    <string name="unknown_album">Album tidak diketahui</string>
+    <string name="unknown_artist">Artis tidak diketahui</string>
+
+    <!-- v3.3: home search, nama, hitung mundur, trending, tema kustom -->
+    <string name="home_search_hint">Cari lagu, artis, atau podcast…</string>
+    <string name="name_edit_title">Nama sapaanmu</string>
+    <string name="name_edit_body">Ditampilkan di sapaan halaman Home.</string>
+    <string name="search_trending">TRENDING DI %1$s</string>
+    <string name="queue_extended">+%1$d lagu otomatis masuk antrean</string>
+    <string name="stream_stopped_unavailable">Stream sedang tidak tersedia - pemutaran dihentikan.</string>
+    <string name="settings_profile">PROFIL</string>
+    <string name="accent_label">Warna aksen aplikasi</string>
+    <string name="accent_default">Bawaan</string>
+    <string name="accent_custom">Warna kustom (geser &amp; terapkan)</string>
+    <string name="accent_apply">TERAPKAN WARNA INI</string>
+    <string name="font_label">Jenis huruf</string>
+    <string name="font_default">Bawaan</string>
+    <string name="home_for_you">Untuk Kamu</string>
+    <string name="search_top_artists">Artis Sedang Populer</string>
+    <string name="region_europe">Eropa</string>
+    <string name="region_asia">Asia</string>
+    <string name="region_america">Amerika</string>
+    <string name="region_africa">Afrika</string>
+    <string name="region_arab">Arab</string>
+    <!-- Kesehatan stream & diagnostik tangga klien -->
+    <string name="sec_stream_health">KESEHATAN STREAM</string>
+    <string name="health_ok">Normal - tidak ada kegagalan beruntun.</string>
+    <string name="health_degraded">Terganggu - sebagian lagu dilewati.</string>
+    <string name="health_tripped">Dihentikan - %1$d kegagalan beruntun.</string>
+    <string name="health_body">Pemutar berhenti melompati lagu setelah kegagalan beruntun, dan hanya melanjutkan setelah ada bukti lagu benar-benar berbunyi.</string>
+    <string name="health_sabr_hint">Terdeteksi pola SABR/DRM: YouTube sedang menutup URL stream untuk klien anonim. Lyreon tidak memakai akun - coba lagi beberapa saat, atau perbarui app bila berlanjut.</string>
+    <string name="health_retry">COBA LAGI</string>
+    <string name="health_dismiss">TUTUP</string>
+    <string name="health_diag_title">Diagnostik klien</string>
+    <string name="health_diag_body">Tes ini mencoba seluruh tangga klien InnerTube, menguji tiap URL audio dengan permintaan byte terakhir, lalu melaporkan klien mana yang benar-benar bisa diputar - berguna tiap kali YouTube mengubah kebijakan.</string>
+    <string name="health_test_running">MENGUJI…</string>
+    <string name="health_test_ok">Stream tersedia</string>
+    <string name="health_test_fail">Tidak ada jalur yang memberi URL audio</string>
+    <string name="health_test_extractor">Extractor: %1$s</string>
+    <string name="health_test_extractor_ok">OK · %1$d stream audio · %2$d ms</string>
+    <string name="health_test_extractor_fail">gagal</string>
+    <string name="health_test_ladder">Tangga klien: audio via %1$s</string>
+    <string name="health_test_ladder_none">tidak ada klien yang berhasil</string>
+    <string name="health_test">Tes koneksi</string>
+    <string name="health_copy">Salin diagnostik</string>
+    <string name="health_copied">Diagnostik disalin ke papan klip</string>
+    <string name="health_reset">Reset cache stream</string>
+    <string name="health_test_manifest">Manifest HLS tersedia via %1$s (bisa diputar)</string>
+    <string name="health_test_cdn_reject">URL audio ditolak CDN (403 / pratinjau ~1 MiB) pada sebagian klien</string>
+    <string name="health_test_url_only">%1$s memberi URL tetapi tidak lolos uji baca</string>
+    <string name="health_test_visitor">visitorData: %1$s</string>
+    <string name="health_test_drm">Sebagian klien membalas format ber-DRM (butuh sesi guest YouTube)</string>
+    <string name="health_test_sabr">SABR-only terdeteksi pada sebagian klien</string>
+    <string name="health_test_hls">Hanya HLS yang tersedia (perlu pemutar HLS)</string>
+    <string name="health_test_recent">Riwayat terbaru:</string>
+
+    <!-- Pesan pemutar / circuit breaker -->
+    <string name="stream_reloading">Memuat ulang stream…</string>
+    <string name="stream_track_skipped">Track dilewati (stream tidak tersedia)</string>
+    <string name="stream_retrying">Mencoba memutar ulang…</string>
+    <string name="stream_tripped_sabr_anonymous">YouTube sedang mengunci stream untuk pemutaran anonim (SABR/poToken). Antrean tetap tersimpan - coba lagi beberapa menit, atau buka Pengaturan - Kesehatan stream untuk melihat klien mana yang masih hidup.</string>
+    <string name="stream_snackbar_action">PENGATURAN</string>
+
+    <!-- Gelombang 7: halaman artis, radio, riwayat-antrean, motion blur, tren per negara -->
+    <string name="browse_track_count">%1$d lagu di halaman ini</string>
+    <string name="browse_play">PUTAR</string>
+    <string name="browse_radio">RADIO</string>
+    <string name="browse_shuffle">ACAK</string>
+    <string name="radio_started">Radio dimulai dari: %1$s</string>
+    <string name="queue_history_filled">Riwayat masuk antrean: %1$d lagu</string>
+    <string name="queue_history_empty">Riwayat putar kosong</string>
+    <string name="history_queue_hint">Riwayat ikut mengisi antrean saat radio kehabisan lagu.</string>
+    <string name="history_queue_action">MUAT RIWAYAT</string>
+    <string name="radio_start">RADIO</string>
+    <string name="home_trending">SEDANG TREN</string>
+    <string name="home_trending_in">TREN DI %1$s</string>
+    <string name="home_trending_loading">Memuat tren...</string>
+    <string name="artwork_accent_title">Warna ikut sampul lagu</string>
+    <string name="artwork_accent_body">Aksen aplikasi mengikuti palet thumbnail lagu yang sedang diputar.</string>
+    <string name="motion_blur_title">Motion blur halus</string>
+    <string name="motion_blur_body">Buram tipis mengikuti gerakan layar dan gulir cepat. Butuh Android 12+; mati otomatis saat Kurangi gerakan aktif atau di perangkat rendah memori.</string>
+    <string name="history_queue_title">Riwayat masuk antrean otomatis</string>
+    <string name="history_queue_body">Lagu yang baru diputar ikut mengisi antrean saat radio kehabisan lagu, dan saat aplikasi dibuka tanpa sesi tersimpan.</string>
+    <string name="action_append_queue">+ ANTRE</string>
+    <string name="action_saved">TERSIMPAN</string>
+</resources>
