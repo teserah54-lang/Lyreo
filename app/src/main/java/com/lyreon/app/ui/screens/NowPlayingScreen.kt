@@ -12,6 +12,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.using
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -958,9 +959,21 @@ private fun PlayerMainArea(
                 targetState = showLyrics,
                 // tween mentah: transitionSpec berjalan di luar konteks
                 // komposisi (lyreonTween adalah @Composable — CI 34174868041).
+                //
+                // .using(null) MEMATIKAN SizeTransform bawaan AnimatedContent.
+                // Tanpa ini, AnimatedContent SELALU membawa SizeTransform
+                // default (spring) walau tidak diminta — dan default itu akan
+                // menganimasikan ukurannya sendiri bila kedua cabang (artwork/
+                // lirik) sampai punya intrinsic size berbeda, persis pola bug
+                // "kotak membesar" di notes/01 §B7. Kedua cabang di bawah SUDAH
+                // fillMaxSize (ukuran seharusnya identik), tapi itu asumsi yang
+                // gampang rusak oleh perubahan berikutnya — .using(null) membuat
+                // "ukuran box tidak pernah berubah" jadi INVARIAN yang dipaksa
+                // API, bukan cuma kebetulan dari modifier yang kebetulan sama.
                 transitionSpec = {
-                    fadeIn(tween(LyreonMotion.deliberate)) togetherWith
-                        fadeOut(tween(LyreonMotion.deliberate))
+                    fadeIn(tween(LyreonMotion.deliberate))
+                        .togetherWith(fadeOut(tween(LyreonMotion.deliberate)))
+                        .using(null)
                 },
                 label = "np_main_area",
             ) { lyrics ->
