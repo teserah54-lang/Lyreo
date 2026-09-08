@@ -7,10 +7,6 @@ package com.lyreon.app
 
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.snapshotFlow
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.SharedTransitionScope
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -120,9 +116,6 @@ import com.lyreon.app.ui.theme.lyreonScreenEnter
 import com.lyreon.app.ui.theme.lyreonScreenExit
 import com.lyreon.app.ui.theme.lyreonScreenPopEnter
 import com.lyreon.app.ui.theme.lyreonScreenPopExit
-import com.lyreon.app.ui.theme.lyreonSharedBoundsTransform
-import com.lyreon.app.ui.theme.lyreonSharedEnter
-import com.lyreon.app.ui.theme.lyreonSharedExit
 import com.lyreon.app.ui.theme.motionBlurLayer
 import com.lyreon.app.ui.theme.rememberMotionBlurState
 import com.lyreon.app.ui.theme.reduceMotionEnabled
@@ -143,8 +136,6 @@ import com.lyreon.app.ui.vm.lyreonViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.dropWhile
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -235,7 +226,6 @@ private val primaryDestinations = listOf(
     Dest("settings", R.string.nav_profile, Icons.Filled.Person, Icons.Outlined.Person),
 )
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 fun LyreonRoot(
     intentState: androidx.compose.runtime.State<Intent?>,
@@ -256,11 +246,6 @@ fun LyreonRoot(
 
     val backStack by navController.currentBackStackEntryAsState()
     val route = backStack?.destination?.route.orEmpty()
-
-    // Switch pembuka/matikan shared-bounds artwork. Dipakai oleh semua pemanggil
-    // navigasi supaya match hanya aktif tepat saat hendak pindah layar, lalu
-    // dimatikan lagi oleh [LaunchedEffect(route)] setelah transisi settle.
-    val artworkSharedEnabled = remember { mutableStateOf(false) }
 
     // ---- Smooth motion blur ----
     // SATU lapis untuk seluruh isi: transisi layar memicunya penuh (14dp sesaat),
@@ -334,7 +319,6 @@ fun LyreonRoot(
             intent.getBooleanExtra(MainActivity.EXTRA_OPEN_NOW_PLAYING, false) -> {
                 intent.removeExtra(MainActivity.EXTRA_OPEN_NOW_PLAYING)
                 onConsumeIntent()
-                artworkSharedEnabled.value = true
                 navController.navigate("now_playing")
             }
             intent.getBooleanExtra(MainActivity.EXTRA_OPEN_DOWNLOADS, false) -> {
@@ -349,9 +333,7 @@ fun LyreonRoot(
                     url != null && playlistUrl == null -> {
                         onConsumeIntent()
                         // share URL biasanya berakhir di Now Playing setelah
-                        // resolve stream; nyalakan shared bounds sejak awal supaya
-                        // transisi tetap jalan saat navigasi terjadi.
-                        artworkSharedEnabled.value = true
+                        // resolve stream.
                         playSharedUrl(locator, url, navController) { msg ->
                             scope.launch { snackbarHostState.showSnackbar(msg) }
                         }
@@ -424,192 +406,143 @@ fun LyreonRoot(
                 snackbarHostState.showSnackbar(context.getString(R.string.snack_no_tracks))
             } else {
                 player.playQueue(tracks, 0)
-                artworkSharedEnabled.value = true
                 navController.navigate("now_playing")
             }
         }
     }
 
-    SharedTransitionLayout(modifier = Modifier.fillMaxSize().background(LyreonBackground)) {
-        val transitionScope = this
-        // Satu state bersama untuk morph artwork mini player ⇄ Now Playing.
-        //
-        // Shared bounds hanya diaktifkan SAAT transisi layar berjalan. Setelah
-        // transisi selesai (atau lewat timeout), matikan match-nya. Ini mengikuti
-        // peringatan dokumentasi komposisi: elemen shared tetap ada di tree
-        // walau `visible == false`, dan akan MEMULAI transisi lagi setiap kali
-        // ukuran/posisinya berubah selama masih punya active match. Mini player
-        // yang disembunyikan di halaman Now Playing adalah pelakunya: ganti lagu
-        // membuatnya berubah ukuran/posisi, lalu shared bounds di Now Playing
-        // "ikut membesar" lagi. Dengan `SharedContentConfig.isEnabled = false`
-        // setelah transisi selesai, ganti lagu TIDAK lagi memicu re-morph.
-        val artworkSharedConfig = remember(artworkSharedEnabled) {
-            object : SharedTransitionScope.SharedContentConfig {
-                override val SharedTransitionScope.SharedContentState.isEnabled: Boolean
-                    get() = artworkSharedEnabled.value
-            }
-        }
-        val npArtworkState = rememberSharedContentState(
-            key = "now_playing_artwork",
-            config = artworkSharedConfig,
+    val miniPlayer: @Composable () -> Unit = {
+        MiniPlayerBar(
+            track = playerState.currentTrack,
+            isPlaying = playerState.isPlaying,
+            isBuffering = playerState.isBuffering,
+            player = player,
+            // Chrome disembunyikan di halaman penuh (Now Playing / detail),
+            // MiniPlayerBar mengelola animasi keluar/masuknya sendiri.
+            visible = !hideChrome,
+            onToggle = player::toggle,
+            onNext = player::next,
+            onOpen = { navController.navigate("now_playing") },
         )
+    }
 
-        // setiap `route` berubah -> aktifkan sebentar, tunggu transisi settle,
-        // lalu matikan kembali. Timeout 1.5 detik juga menjaga rute tanpa
-        // shared-content supaya tidak pernah nyangkut aktif.
-        LaunchedEffect(route) {
-            artworkSharedEnabled.value = true
-            kotlinx.coroutines.withTimeoutOrNull(1_500L) {
-                snapshotFlow { transitionScope.isTransitionActive }
-                    .dropWhile { !it }
-                    .first { !it }
-            }
-            artworkSharedEnabled.value = false
-        }
-
-        val miniPlayer: @Composable () -> Unit = {
-            MiniPlayerBar(
-                track = playerState.currentTrack,
-                isPlaying = playerState.isPlaying,
-                isBuffering = playerState.isBuffering,
-                player = player,
-                // Tetap dikomposisi (animasi keluar) saat chrome disembunyikan,
-                // supaya shared transition punya bounds sumber saat Now Playing masuk.
-                visible = !hideChrome,
-                sharedElementScope = transitionScope,
-                sharedContentState = npArtworkState,
-                onToggle = player::toggle,
-                onNext = player::next,
-                onOpen = {
-                    artworkSharedEnabled.value = true
-                    navController.navigate("now_playing")
-                },
-            )
-        }
-
-        Scaffold(
-            modifier = Modifier.fillMaxSize(),
-            containerColor = LyreonBackground,
-            contentWindowInsets = WindowInsets.safeDrawing,
-            snackbarHost = { SnackbarHost(snackbarHostState) },
-            bottomBar = {
-                if (!useRail) {
-                    Column {
-                        miniPlayer()
-                        if (!hideChrome) {
-                            // Floating island ala iOS — bar navigasi melayang membulat
-                            Box(
-                                modifier = Modifier
-                                    .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
-                                    .clip(LyreonChromeShape)
-                                    .background(LyreonSurfaceTranslucent)
-                                    .border(1.dp, LyreonHairline, LyreonChromeShape),
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = LyreonBackground,
+        contentWindowInsets = WindowInsets.safeDrawing,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        bottomBar = {
+            if (!useRail) {
+                Column {
+                    miniPlayer()
+                    if (!hideChrome) {
+                        // Floating island ala iOS — bar navigasi melayang membulat
+                        Box(
+                            modifier = Modifier
+                                .padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 10.dp)
+                                .clip(LyreonChromeShape)
+                                .background(LyreonSurfaceTranslucent)
+                                .border(1.dp, LyreonHairline, LyreonChromeShape),
+                        ) {
+                            NavigationBar(
+                                containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                                contentColor = LyreonTextPrimary,
+                                tonalElevation = 0.dp,
                             ) {
-                                NavigationBar(
-                                    containerColor = androidx.compose.ui.graphics.Color.Transparent,
-                                    contentColor = LyreonTextPrimary,
-                                    tonalElevation = 0.dp,
-                                ) {
-                                    primaryDestinations.forEach { dest ->
-                                        val selected = route == dest.route
-                                        NavigationBarItem(
-                                            selected = selected,
-                                            onClick = {
-                                                navController.navigate(dest.route) {
-                                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                                    launchSingleTop = true
-                                                    restoreState = true
-                                                }
-                                            },
-                                            icon = {
-                                                Icon(
-                                                    if (selected) dest.selected else dest.unselected,
-                                                    contentDescription = stringResource(dest.labelRes),
-                                                )
-                                            },
-                                            label = { Text(stringResource(dest.labelRes), style = MaterialTheme.typography.labelSmall) },
-                                            colors = navColors,
-                                        )
-                                    }
+                                primaryDestinations.forEach { dest ->
+                                    val selected = route == dest.route
+                                    NavigationBarItem(
+                                        selected = selected,
+                                        onClick = {
+                                            navController.navigate(dest.route) {
+                                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                                launchSingleTop = true
+                                                restoreState = true
+                                            }
+                                        },
+                                        icon = {
+                                            Icon(
+                                                if (selected) dest.selected else dest.unselected,
+                                                contentDescription = stringResource(dest.labelRes),
+                                            )
+                                        },
+                                        label = { Text(stringResource(dest.labelRes), style = MaterialTheme.typography.labelSmall) },
+                                        colors = navColors,
+                                    )
                                 }
                             }
                         }
                     }
                 }
-            },
-        ) { innerPadding ->
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding),
-            ) {
-                if (useRail && !hideChrome) {
-                    NavigationRail(
-                        containerColor = LyreonElevated,
-                        contentColor = LyreonTextPrimary,
-                        modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
-                    ) {
-                        primaryDestinations.forEach { dest ->
-                            val selected = route == dest.route
-                            NavigationRailItem(
-                                selected = selected,
-                                onClick = {
-                                    navController.navigate(dest.route) {
-                                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                                        launchSingleTop = true
-                                        restoreState = true
-                                    }
-                                },
-                                icon = {
-                                    Icon(
-                                        if (selected) dest.selected else dest.unselected,
-                                        contentDescription = stringResource(dest.labelRes),
-                                    )
-                                },
-                                label = { Text(stringResource(dest.labelRes), style = MaterialTheme.typography.labelSmall) },
-                                colors = railColors,
-                            )
-                        }
-                    }
-                }
-
-                Column(
-                    modifier = Modifier
-                        .weight(1f)
-                        // Koneksi nested scroll dipasang di INDUK semua layar: satu
-                        // koneksi melayani setiap LazyColumn tanpa biaya per item.
-                        .scrollMotionBlur(motionBlurState, enabled = blurActive)
-                        .motionBlurLayer(
-                            state = motionBlurState,
-                            maxRadius = MotionBlurTransitionRadius,
-                            enabled = blurActive,
-                        ),
+            }
+        },
+    ) { innerPadding ->
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding),
+        ) {
+            if (useRail && !hideChrome) {
+                NavigationRail(
+                    containerColor = LyreonElevated,
+                    contentColor = LyreonTextPrimary,
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.navigationBars),
                 ) {
-                    if (useRail) {
-                        miniPlayer()
+                    primaryDestinations.forEach { dest ->
+                        val selected = route == dest.route
+                        NavigationRailItem(
+                            selected = selected,
+                            onClick = {
+                                navController.navigate(dest.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = {
+                                Icon(
+                                    if (selected) dest.selected else dest.unselected,
+                                    contentDescription = stringResource(dest.labelRes),
+                                )
+                            },
+                            label = { Text(stringResource(dest.labelRes), style = MaterialTheme.typography.labelSmall) },
+                            colors = railColors,
+                        )
                     }
-
-                    LyreonNavHost(
-                        navController = navController,
-                        locator = locator,
-                        playerState = playerState,
-                        videoMode = videoMode,
-                        likedIds = likedIds,
-                        downloadedIds = downloadedIds,
-                        reduceMotion = reduceMotionEnabled,
-                        onLike = ::likeTrack,
-                        onMore = ::openTrackActions,
-                        onEnqueueDownload = ::enqueueDownload,
-                        onSleepTimerClick = { showSleepTimer = true },
-                        playMovement = ::playQueryMovement,
-                        sharedTransitionScope = transitionScope,
-                        npArtworkState = npArtworkState,
-                        onBeforeSharedNavigation = {
-                            artworkSharedEnabled.value = true
-                        },
-                        modifier = Modifier.weight(1f),
-                    )
                 }
+            }
+
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    // Koneksi nested scroll dipasang di INDUK semua layar: satu
+                    // koneksi melayani setiap LazyColumn tanpa biaya per item.
+                    .scrollMotionBlur(motionBlurState, enabled = blurActive)
+                    .motionBlurLayer(
+                        state = motionBlurState,
+                        maxRadius = MotionBlurTransitionRadius,
+                        enabled = blurActive,
+                    ),
+            ) {
+                if (useRail) {
+                    miniPlayer()
+                }
+
+                LyreonNavHost(
+                    navController = navController,
+                    locator = locator,
+                    playerState = playerState,
+                    videoMode = videoMode,
+                    likedIds = likedIds,
+                    downloadedIds = downloadedIds,
+                    reduceMotion = reduceMotionEnabled,
+                    onLike = ::likeTrack,
+                    onMore = ::openTrackActions,
+                    onEnqueueDownload = ::enqueueDownload,
+                    onSleepTimerClick = { showSleepTimer = true },
+                    playMovement = ::playQueryMovement,
+                    modifier = Modifier.weight(1f),
+                )
             }
         }
     }
@@ -677,7 +610,6 @@ fun LyreonRoot(
     }
 }
 
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun LyreonNavHost(
     navController: NavHostController,
@@ -692,19 +624,14 @@ private fun LyreonNavHost(
     onEnqueueDownload: (LyreonTrack) -> Unit,
     onSleepTimerClick: () -> Unit,
     playMovement: (String) -> Unit,
-    sharedTransitionScope: SharedTransitionScope,
-    npArtworkState: SharedTransitionScope.SharedContentState,
-    onBeforeSharedNavigation: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val player = locator.player
 
-    // Semua navigasi di layar disalurkan lewat helper ini supaya shared-bounds
-    // artwork dinyalakan TEPAT SEBELUM route changed. Ini penting: match harus
-    // sudah enabled saat destination baru mulai dikomposisi, bukan menunggu
-    // LaunchedEffect(route) yang baru berjalan setelah transisi dimulai.
+    // Helper navigasi lokal: satu titik keluar untuk semua `navigate(...)` di
+    // layar, sehingga nanti kalau ada perilaku sebelum pindah layar (mis. blur
+    // atau state transisi) cukup diubah di sini.
     fun navigateShared(block: () -> Unit) {
-        onBeforeSharedNavigation()
         block()
     }
 
@@ -940,19 +867,8 @@ private fun LyreonNavHost(
 
         composable("now_playing") {
             val current = playerState.currentTrack
-            // Shared bounds dengan artwork mini player (sumber morph saat masuk).
-            val artworkSharedModifier = with(sharedTransitionScope) {
-                Modifier.sharedBounds(
-                    npArtworkState,
-                    animatedVisibilityScope = this@composable,
-                    enter = lyreonSharedEnter(),
-                    exit = lyreonSharedExit(),
-                    boundsTransform = lyreonSharedBoundsTransform(),
-                )
-            }
             NowPlayingScreen(
                 playerState = playerState,
-                artworkSharedModifier = artworkSharedModifier,
                 player = player,
                 videoMode = videoMode,
                 controller = player.mediaController,
